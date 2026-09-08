@@ -768,7 +768,7 @@
   .pause-overlay {
     position: fixed;
     inset: 0;
-    z-index: 25;
+    z-index: 40;
     display: none;
     place-items: center;
     background: rgba(246, 247, 249, 0.88);
@@ -1053,7 +1053,7 @@
           </div>
           <div class="rule-row">
             <span class="badge neutral">返信</span>
-            <div><strong>「返信不要」は送らず完了。</strong> 情報共有だけの連絡も返信しない判断が正解になる場合があります。</div>
+            <div><strong>「返信不要」は送らず完了。</strong> お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡と、個人からの声かけには返信します。</div>
           </div>
         </div>
       </section>
@@ -1230,15 +1230,15 @@
   const LEVEL1_DATA = [
     { sender: "田中部長", text: "顧客からクレームが入った。至急状況を確認して折り返してくれ。", prio: "high", options: ["至急確認し、対応いたします。", "明日確認します。", "関係ありません。"], correctOpt: 0, requiresReply: true },
     { sender: "システム通知", text: "【重要】サーバーAがダウンしました。復旧作業を開始してください。", prio: "high", options: ["原因調査を開始します。", "了解しました。後でやります。", "分かりません。"], correctOpt: 0, requiresReply: true },
-    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", options: ["承知いたしました。拝読します。"], correctOpt: null, requiresReply: false },
+    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", options: ["承知いたしました。拝読します。", "詳しい資料を送ってください。", "配信を停止してください。"], correctOpt: null, requiresReply: false },
     { sender: "総務部", text: "健康診断の希望日を今週末までに提出してください。", prio: "mid", options: ["今日中に行きます。", "期日までに提出いたします。", "提出しません。"], correctOpt: 1, requiresReply: true },
     { sender: "同僚の佐藤", text: "お疲れ様！来週の飲み会来れそう？", prio: "low", options: ["至急対応します！", "お疲れ様です。参加します！", "業務に集中してください。"], correctOpt: 1, requiresReply: true },
-    { sender: "経理部", text: "先月の経費精算書類に不備があります。修正して再提出してください。", prio: "mid", options: ["すぐ再提出します。", "後ほど確認し、修正いたします。", "間違っていません。"], correctOpt: 1, requiresReply: true },
-    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", options: ["読みました！"], correctOpt: null, requiresReply: false },
+    { sender: "経理部", text: "先月の経費精算書類に不備があります。修正して再提出してください。", prio: "mid", options: ["経理部で修正しておいてください。", "後ほど確認し、修正いたします。", "間違っていません。"], correctOpt: 1, requiresReply: true },
+    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", options: ["読みました！", "感想をお送りします。", "次回のテーマを教えてください。"], correctOpt: null, requiresReply: false },
     { sender: "営業の鈴木", text: "出張のお土産を買ってきたよ。休憩室に置いておきます。", prio: "low", options: ["ありがとうございます。後でいただきます。", "すぐ食べに行きます！", "いりません。"], correctOpt: 0, requiresReply: true },
     { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "mid", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
-    { sender: "受付", text: "C社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
-    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。（返信不要）", prio: "mid", options: ["承知いたしました。"], correctOpt: null, requiresReply: false }
+    { sender: "受付", text: "重要顧客のC社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
+    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。（返信不要）", prio: "mid", options: ["承知いたしました。", "その日は出社します。", "停電の時間帯を教えてください。"], correctOpt: null, requiresReply: false }
   ];
 
   const TYPING_DATA = [
@@ -1253,7 +1253,7 @@
     { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
     { sender: "IT部門", text: "パスワードの定期変更期限が近づいています。5日以内に変更してください。", prio: "mid", reply: "承知いたしました。変更手続きを行います。", requiresReply: true },
     { sender: "営業事務", text: "今月の売上見込データの入力をお願いします。水曜が締め切りです。", prio: "mid", reply: "承知いたしました。期日までに入力します。", requiresReply: true },
-    { sender: "総務部", text: "防災訓練のお知らせです。来月15日の14時から実施します。", prio: "mid", reply: "承知いたしました。スケジュールに登録します。", requiresReply: true },
+    { sender: "総務部", text: "防災訓練のお知らせです。来月15日の14時から実施します。参加可否を今週中にご返信ください。", prio: "mid", reply: "承知いたしました。参加いたします。", requiresReply: true },
     { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", reply: "お知らせありがとうございます。", requiresReply: false },
     { sender: "営業の吉田", text: "取引先からお中元のメロンが届きました。休憩室で切り分けます。", prio: "low", reply: "ありがとうございます。後でいただきます。", requiresReply: true },
     { sender: "システム通知", text: "メールボックスの容量が80%に達しました。不要なメールを削除してください。", prio: "low", reply: "確認いたしました。", requiresReply: true },
@@ -1333,6 +1333,8 @@
     activeId: null,
     idSeed: 0,
     phoneRecords: [],
+    lastPhone: null,
+    focusBeforePhone: null,
     endsAt: 0,
     pausedAt: 0,
     currentPhone: null,
@@ -1395,8 +1397,9 @@
 
     document.addEventListener("keydown", (event) => {
       if (!document.getElementById("game-screen").classList.contains("active")) return;
-      if (event.key === "Escape" && !els.phoneModal.classList.contains("show")) {
+      if (event.key === "Escape") {
         // IMEの変換取り消しで Esc を押すため、入力欄では一時停止しない。
+        // 着信中でも一時停止できるようにする（配慮機能はどの場面からも到達できること）。
         const target = event.target;
         if (!target || target.id !== "typing-input") togglePause();
       }
@@ -1452,6 +1455,7 @@
     state.chats = [];
     state.phoneRecords = [];
     state.currentPhone = null;
+    state.lastPhone = null;
     state.activeId = null;
     state.idSeed = 0;
     state.gameOver = false;
@@ -1548,7 +1552,7 @@
   function scheduleNextPhone(delay) {
     window.clearTimeout(state.phoneTimerId);
     if (state.gameOver || state.level !== 3) return;
-    const wait = delay || randomBetween(22000, 38000);
+    const wait = delay || phoneInterval();
     state.phoneTimerId = window.setTimeout(() => {
       if (state.gameOver) return;
       if (state.paused) {
@@ -1557,6 +1561,12 @@
       }
       showPhone();
     }, wait);
+  }
+
+  // 電話は制限時間に応じて配分し、1セッションおよそ5回にする。
+  function phoneInterval() {
+    const base = Math.max(45000, Math.round((state.durationSec * 1000) / 5));
+    return randomBetween(Math.round(base * 0.75), Math.round(base * 1.25));
   }
 
   function gameTick() {
@@ -1678,6 +1688,16 @@
     focusTypingInput();
   }
 
+  // 優先度の選び直し。入力途中の下書きは保持する。
+  function reopenPriority() {
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+    chat.status = "unread";
+    chat.selectedPrio = null;
+    chat.prioAt = null;
+    renderAll();
+  }
+
   function updateTypingProgress(chat) {
     const progress = typingProgress(chat);
     
@@ -1723,6 +1743,9 @@
           <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
           <p class="feedback-line">返信不要の連絡は、このボタンで処理します。</p>
         </section>
+        <section class="step">
+          <button class="text-btn" type="button" id="redo-prio-btn">優先度を選び直す</button>
+        </section>
       `;
       els.taskPanel.querySelectorAll("[data-option]").forEach((button) => {
         button.addEventListener("click", () => finishChat({
@@ -1735,6 +1758,7 @@
         action: "no_reply",
         selectedReply: ""
       }));
+      els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
       return;
     }
 
@@ -1753,6 +1777,9 @@
           <p class="feedback-line" id="typing-feedback">${progress.feedback}</p>
         </div>
       </section>
+      <section class="step">
+        <button class="text-btn" type="button" id="redo-prio-btn">優先度を選び直す</button>
+      </section>
     `;
 
     const input = els.taskPanel.querySelector("#typing-input");
@@ -1770,6 +1797,7 @@
       action: "no_reply",
       selectedReply: ""
     }));
+    els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
     focusTypingInput(true);
   }
 
@@ -1840,8 +1868,13 @@
   }
 
   function showPhone() {
-    state.currentPhone = PHONE_DATA[randomBetween(0, PHONE_DATA.length - 1)];
+    // 候補が6件しかないため、抽選し直さないと同じ相手が連続で着信する。
+    const candidates = PHONE_DATA.filter((item) => item !== state.lastPhone);
+    const pool = candidates.length ? candidates : PHONE_DATA;
+    state.currentPhone = pool[randomBetween(0, pool.length - 1)];
+    state.lastPhone = state.currentPhone;
     els.callerName.textContent = state.currentPhone.caller;
+    state.focusBeforePhone = document.activeElement;
     els.phoneModal.classList.add("show");
     els.answerPhone.focus();
   }
@@ -1866,7 +1899,16 @@
       els.chatHeading.textContent = "電話対応完了";
       els.chatBadge.textContent = "復帰";
       els.messageStage.innerHTML = '<div class="empty-state">電話対応が完了しました。受信トレイから作業を再開してください。</div>';
+    } else {
+      // 無視した場合は作業が中断されない想定なので、元の位置に戻して作業を続けられるようにする。
+      const previous = state.focusBeforePhone;
+      if (previous && document.contains(previous) && previous !== els.answerPhone && previous !== els.ignorePhone) {
+        previous.focus();
+      } else {
+        focusTypingInput(true);
+      }
     }
+    state.focusBeforePhone = null;
 
     showToast(correct ? "電話判断を記録しました。" : "電話判断を記録しました。結果画面で確認できます。");
     scheduleNextPhone();
@@ -1879,12 +1921,19 @@
     els.pauseBtn.textContent = state.paused ? "再開" : "一時停止";
     if (state.paused) {
       state.pausedAt = Date.now();
+      // 着信中に一時停止した場合、再開するまで着信画面を伏せておく。
+      if (state.currentPhone) els.phoneModal.classList.remove("show");
     } else {
       if (state.pausedAt) state.endsAt += Date.now() - state.pausedAt;
       state.pausedAt = 0;
       scheduleNextChat(1500);
       if (state.level === 3) scheduleNextPhone(2200);
-      focusTypingInput(true);
+      if (state.currentPhone) {
+        els.phoneModal.classList.add("show");
+        els.answerPhone.focus();
+      } else {
+        focusTypingInput(true);
+      }
     }
   }
 
@@ -2045,7 +2094,7 @@
   }
 
   function downloadCSV() {
-    const rows = state.chats.map(toCsvRow);
+    const rows = [...state.chats].sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map(toCsvRow);
     if (rows.length === 0) {
       showToast("出力するデータがありません。");
       return;
