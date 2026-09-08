@@ -874,6 +874,44 @@
     font-size: 18px;
   }
 
+  /* 「ゆったり」は body の font-size だけでは px 直指定の要素に効かないため、
+     利用者さんが実際に読む要素を個別に拡大する。 */
+  body.comfortable .message-bubble {
+    font-size: 22px;
+    line-height: 1.9;
+  }
+
+  body.comfortable .message-meta,
+  body.comfortable .preview,
+  body.comfortable .feedback-line,
+  body.comfortable .setting-label,
+  body.comfortable .inbox-stats {
+    font-size: 16px;
+  }
+
+  body.comfortable .target-text {
+    font-size: 21px;
+    line-height: 1.9;
+  }
+
+  body.comfortable .typing-input {
+    min-height: 60px;
+    font-size: 21px;
+  }
+
+  body.comfortable .priority-btn,
+  body.comfortable .choice-btn,
+  body.comfortable .secondary-btn,
+  body.comfortable .primary-btn {
+    min-height: 56px;
+    font-size: 18px;
+  }
+
+  body.comfortable .empty-state,
+  body.comfortable .step h3 {
+    font-size: 19px;
+  }
+
   body.comfortable .workspace {
     grid-template-columns: 360px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -1051,7 +1089,7 @@
 
           <div class="settings-grid" aria-label="実施設定">
             <div class="setting-block">
-              <span class="setting-label">制限時間</span>
+              <span class="setting-label">制限時間（Level 2・3で有効）</span>
               <div class="segmented" id="duration-options">
                 <button type="button" data-duration="300">5分</button>
                 <button type="button" data-duration="600">10分</button>
@@ -1226,6 +1264,9 @@
     { sender: "広報チーム", text: "社内報の写真募集を開始しました。任意参加です。（返信不要）", prio: "low", reply: "確認しました。", requiresReply: false }
   ];
 
+  // Level 2・3 の開始時にあらかじめ受信トレイへ入れておく件数
+  const INITIAL_TYPING_CHATS = 4;
+
   const PHONE_DATA = [
     { caller: "重要顧客 A社 取締役", isEmergency: true },
     { caller: "システム障害監視センター", isEmergency: true },
@@ -1291,8 +1332,9 @@
     nextPoolIndex: 0,
     activeId: null,
     idSeed: 0,
-    records: [],
     phoneRecords: [],
+    endsAt: 0,
+    pausedAt: 0,
     currentPhone: null,
     paused: false,
     gameOver: false,
@@ -1330,6 +1372,18 @@
       renderSettings();
     });
 
+    els.phoneModal.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      // 応答する / 無視する の間だけを行き来させ、背面へフォーカスが抜けないようにする。
+      const focusable = [els.answerPhone, els.ignorePhone];
+      const current = focusable.indexOf(document.activeElement);
+      event.preventDefault();
+      const next = event.shiftKey
+        ? (current <= 0 ? focusable.length - 1 : current - 1)
+        : (current === focusable.length - 1 ? 0 : current + 1);
+      focusable[next].focus();
+    });
+
     els.pauseBtn.addEventListener("click", togglePause);
     els.resumeBtn.addEventListener("click", togglePause);
     els.finishBtn.addEventListener("click", () => endGame("manual"));
@@ -1342,7 +1396,9 @@
     document.addEventListener("keydown", (event) => {
       if (!document.getElementById("game-screen").classList.contains("active")) return;
       if (event.key === "Escape" && !els.phoneModal.classList.contains("show")) {
-        togglePause();
+        // IMEの変換取り消しで Esc を押すため、入力欄では一時停止しない。
+        const target = event.target;
+        if (!target || target.id !== "typing-input") togglePause();
       }
       if (event.altKey && ["1", "2", "3"].includes(event.key)) {
         const prio = { "1": "high", "2": "mid", "3": "low" }[event.key];
@@ -1391,8 +1447,9 @@
     state.level = level;
     state.lastLevel = level;
     state.timeRemaining = level === 1 ? 0 : state.durationSec;
+    state.endsAt = level === 1 ? 0 : Date.now() + state.durationSec * 1000;
+    state.pausedAt = 0;
     state.chats = [];
-    state.records = [];
     state.phoneRecords = [];
     state.currentPhone = null;
     state.activeId = null;
@@ -1408,7 +1465,7 @@
       LEVEL1_DATA.forEach((data) => state.chats.push(createChat(data)));
     } else {
       state.pool = shuffle(TYPING_DATA);
-      for (let index = 0; index < Math.min(4, state.pool.length); index += 1) {
+      for (let index = 0; index < Math.min(INITIAL_TYPING_CHATS, state.pool.length); index += 1) {
         addNextTypingChat();
       }
       state.timerId = window.setInterval(gameTick, 1000);
@@ -1466,7 +1523,7 @@
   function scheduleNextChat(delay) {
     window.clearTimeout(state.chatTimerId);
     if (state.gameOver || state.level === 1 || state.nextPoolIndex >= state.pool.length) return;
-    const wait = delay || randomBetween(9000, 16000);
+    const wait = delay || typingChatInterval();
     state.chatTimerId = window.setTimeout(() => {
       if (state.gameOver) return;
       if (state.paused) {
@@ -1478,6 +1535,14 @@
       updateMetrics();
       scheduleNextChat();
     }, wait);
+  }
+
+  // 残りのチャットを制限時間の約4分の3に均等配分する。
+  // 固定間隔だと10分・15分を選んでも3分程度で全件届き切ってしまうため。
+  function typingChatInterval() {
+    const remaining = Math.max(1, state.pool.length - INITIAL_TYPING_CHATS);
+    const base = Math.max(6000, Math.round((state.durationSec * 1000 * 0.75) / remaining));
+    return randomBetween(Math.round(base * 0.75), Math.round(base * 1.25));
   }
 
   function scheduleNextPhone(delay) {
@@ -1496,7 +1561,8 @@
 
   function gameTick() {
     if (state.gameOver || state.paused) return;
-    state.timeRemaining = Math.max(0, state.timeRemaining - 1);
+    // setInterval は裏タブで間引かれるため、残り時間は実時間から計算する。
+    state.timeRemaining = Math.max(0, Math.round((state.endsAt - Date.now()) / 1000));
     updateMetrics();
     if (state.timeRemaining <= 0) endGame("time");
   }
@@ -1704,6 +1770,7 @@
       action: "no_reply",
       selectedReply: ""
     }));
+    focusTypingInput(true);
   }
 
   function renderCompletedPanel(chat) {
@@ -1759,12 +1826,15 @@
       chat.isReplyCorrect = chat.requiresReply === true && normalize(chat.selectedReply) === normalize(chat.reply);
     }
 
-    state.records.push(chat);
     state.activeId = null;
     renderAll();
     clearSelection();
 
-    if (state.level === 1 && state.chats.every((item) => item.status === "completed")) {
+    const allDone = state.chats.every((item) => item.status === "completed");
+    if (state.level === 1 && allDone) {
+      endGame("complete");
+    } else if (state.level !== 1 && allDone && state.nextPoolIndex >= state.pool.length) {
+      // 新着が尽きたあとに手持ちがなくなったら、残り時間を待たせずに終了する。
       endGame("complete");
     }
   }
@@ -1792,6 +1862,7 @@
     if (didAnswer) {
       state.activeId = null;
       clearSelection();
+      renderSidebar();
       els.chatHeading.textContent = "電話対応完了";
       els.chatBadge.textContent = "復帰";
       els.messageStage.innerHTML = '<div class="empty-state">電話対応が完了しました。受信トレイから作業を再開してください。</div>';
@@ -1806,9 +1877,14 @@
     state.paused = !state.paused;
     els.pauseOverlay.classList.toggle("show", state.paused);
     els.pauseBtn.textContent = state.paused ? "再開" : "一時停止";
-    if (!state.paused) {
+    if (state.paused) {
+      state.pausedAt = Date.now();
+    } else {
+      if (state.pausedAt) state.endsAt += Date.now() - state.pausedAt;
+      state.pausedAt = 0;
       scheduleNextChat(1500);
       if (state.level === 3) scheduleNextPhone(2200);
+      focusTypingInput(true);
     }
   }
 
@@ -1828,9 +1904,10 @@
     els.resultSubtitle.textContent = `${getLevelSubtitle(state.level)} / ${getEndReason(reason)}`;
     els.scoreGrid.innerHTML = `
       ${scoreCard("完了", `${summary.completed}/${summary.total}`, "件")}
-      ${scoreCard("優先度", `${summary.prioAccuracy}`, "%")}
-      ${scoreCard("返信", `${summary.replyAccuracy}`, "%")}
-      ${scoreCard("平均処理", `${summary.averageTotal}`, "秒")}
+      ${scoreCard("優先度", summary.prioAccuracy, "%")}
+      ${scoreCard("返信", summary.replyAccuracy, "%")}
+      ${scoreCard("平均処理", summary.averageTotal, "秒")}
+      ${state.level === 3 ? scoreCard("電話判断", summary.phoneAccuracy, "%") : ""}
     `;
 
     els.insightGrid.innerHTML = `
@@ -1864,22 +1941,19 @@
 
     const strengths = [];
     if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
-    if (prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
-    if (replyAccuracy >= 80) strengths.push("返信する、返信しないの切り分けが安定しています。");
-    if (state.level === 3 && state.phoneRecords.length > 0 && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
+    if (prioAccuracy !== null && prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
+    if (replyAccuracy !== null && replyAccuracy >= 80) strengths.push("返信する、返信しないの切り分けが安定しています。");
+    if (state.level === 3 && phoneAccuracy !== null && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
     if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
 
     const nextSteps = [];
     if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未読を開く順番を意識しましょう。");
-    if (prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
-    if (replyAccuracy < 80) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。");
-    if (noReplyItems.length > 0 && noReplyAccuracy < 80) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
-    if (state.level === 3 && state.phoneRecords.length > 0 && phoneAccuracy < 80) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
+    if (prioAccuracy !== null && prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
+    if (replyAccuracy !== null && replyAccuracy < 80) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。");
+    if (noReplyAccuracy !== null && noReplyAccuracy < 80) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+    if (state.level === 3 && phoneAccuracy !== null && phoneAccuracy < 80) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
     if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
 
-    if (state.level === 3) {
-      strengths.push(`電話対応: ${state.phoneRecords.length ? `${phoneAccuracy}%` : "発生なし"}`);
-    }
 
     return {
       total,
@@ -1887,6 +1961,7 @@
       prioAccuracy,
       replyAccuracy,
       averageTotal,
+      phoneAccuracy,
       strengths,
       nextSteps,
       reviewRows
@@ -1926,10 +2001,12 @@
   }
 
   function scoreCard(label, value, unit) {
+    const text = formatStat(value);
+    const suffix = text === "-" ? "" : `<small style="font-size:14px;"> ${escapeHtml(unit)}</small>`;
     return `
       <div class="score-card">
         <span>${escapeHtml(label)}</span>
-        <strong>${escapeHtml(value)}<small style="font-size:14px;"> ${escapeHtml(unit)}</small></strong>
+        <strong>${escapeHtml(text)}${suffix}</strong>
       </div>
     `;
   }
@@ -1993,7 +2070,9 @@
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    // toISOString はUTCなので、日本時間の午前中は前日の日付になってしまう。
+    const now = new Date();
+    const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     link.href = url;
     link.download = `task_training_result_L${state.level}_${date}.csv`;
     document.body.appendChild(link);
@@ -2086,15 +2165,27 @@
     return `"${text.replace(/"/g, '""')}"`;
   }
 
+  // 分母が0のときに 0% を返すと「全問不正解」に見えてしまうため null を返し、
+  // 表示側で「-」に置き換える。
   function percent(numerator, denominator) {
-    if (!denominator) return 0;
+    if (!denominator) return null;
     return Math.round((numerator / denominator) * 100);
   }
 
+  // secondsBetween は toFixed で文字列を返すため、数値化してから平均を取る。
+  // 未計測の項目は空文字なので、Number("") が 0 になって平均を歪めないよう先に除外する。
   function average(values) {
-    const valid = values.filter((value) => Number.isFinite(value));
-    if (!valid.length) return "0.0";
+    const valid = values
+      .filter((value) => value !== "" && value !== null && value !== undefined)
+      .map(Number)
+      .filter((value) => Number.isFinite(value));
+    if (!valid.length) return null;
     return (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1);
+  }
+
+  // 集計できなかった値は「-」で表示する。
+  function formatStat(value) {
+    return value === null || value === undefined ? "-" : String(value);
   }
 
   function secondsBetween(start, end) {
