@@ -1142,7 +1142,7 @@
           <div class="inbox-head">
             <h2 id="inbox-title">受信トレイ</h2>
             <div class="inbox-stats">
-              <span id="unread-count">未読 0</span>
+              <span id="unread-count">未処理 0</span>
               <span id="pending-count">保留 0</span>
               <span id="completed-count">処理済 0</span>
             </div>
@@ -1156,7 +1156,7 @@
             <span class="badge neutral" id="chat-status-badge">待機</span>
           </div>
           <div class="message-stage" id="message-stage">
-            <div class="empty-state">左の受信トレイから未読または保留中のメッセージを選択してください。</div>
+            <div class="empty-state">左の受信トレイから未処理または保留中のメッセージを選択してください。</div>
           </div>
         </section>
 
@@ -1236,7 +1236,7 @@
     { sender: "経理部", text: "先月の経費精算書類に不備があります。修正して再提出してください。", prio: "mid", options: ["すぐ再提出します。", "後ほど確認し、修正いたします。", "間違っていません。"], correctOpt: 1, requiresReply: true },
     { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", options: ["読みました！"], correctOpt: null, requiresReply: false },
     { sender: "営業の鈴木", text: "出張のお土産を買ってきたよ。休憩室に置いておきます。", prio: "low", options: ["ありがとうございます。後でいただきます。", "すぐ食べに行きます！", "いりません。"], correctOpt: 0, requiresReply: true },
-    { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "high", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
+    { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "mid", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
     { sender: "受付", text: "C社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
     { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。（返信不要）", prio: "mid", options: ["承知いたしました。"], correctOpt: null, requiresReply: false }
   ];
@@ -1317,7 +1317,7 @@
     high: "高",
     mid: "中",
     low: "低",
-    unread: "未読",
+    unread: "未処理",
     unreplied: "保留",
     completed: "処理済"
   };
@@ -1613,7 +1613,7 @@
     els.chatHeading.textContent = "チャットを選択してください";
     els.chatBadge.textContent = "待機";
     els.chatBadge.className = "badge neutral";
-    els.messageStage.innerHTML = '<div class="empty-state">左の受信トレイから未読または保留中のメッセージを選択してください。</div>';
+    els.messageStage.innerHTML = '<div class="empty-state">左の受信トレイから未処理または保留中のメッセージを選択してください。</div>';
     els.taskPanel.innerHTML = `
       <section class="step">
         <h3>処理ステップ</h3>
@@ -1947,7 +1947,7 @@
     if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
 
     const nextSteps = [];
-    if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未読を開く順番を意識しましょう。");
+    if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
     if (prioAccuracy !== null && prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
     if (replyAccuracy !== null && replyAccuracy < 80) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。");
     if (noReplyAccuracy !== null && noReplyAccuracy < 80) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
@@ -2019,7 +2019,7 @@
     els.timer.textContent = state.level === 1 ? "全件" : formatTime(state.timeRemaining);
     els.doneCount.textContent = completed;
     els.openCount.textContent = open;
-    els.unreadCount.textContent = `未読 ${unread}`;
+    els.unreadCount.textContent = `未処理 ${unread}`;
     els.pendingCount.textContent = `保留 ${pending}`;
     els.completedCount.textContent = `処理済 ${completed}`;
   }
