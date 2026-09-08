@@ -1,0 +1,2148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>チャットタスク管理・タイピングトレーニング V6</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-soft: #f0f4f5;
+    --ink: #172126;
+    --muted: #5f6b73;
+    --line: #d9e0e4;
+    --primary: #24515c;
+    --primary-strong: #183b43;
+    --primary-soft: #dcebee;
+    --accent: #b85d3f;
+    --accent-soft: #f4e4dd;
+    --high: #be3d45;
+    --mid: #b27a17;
+    --low: #2f7d58;
+    --blue: #4267a8;
+    --focus: #0b6bcb;
+    --shadow: 0 16px 36px rgba(23, 33, 38, 0.10);
+    --radius: 8px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Meiryo", "Yu Gothic", "Segoe UI", sans-serif;
+    line-height: 1.55;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  button {
+    border: 0;
+    cursor: pointer;
+    border-radius: 6px;
+    font-weight: 700;
+  }
+
+  button:focus-visible,
+  input:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--focus) 70%, white);
+    outline-offset: 2px;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .screen {
+    display: none;
+    min-height: 100vh;
+  }
+
+  .screen.active {
+    display: block;
+  }
+
+  .top-line {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px clamp(16px, 3vw, 32px);
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-title {
+    margin: 0;
+    color: var(--primary-strong);
+    font-size: clamp(20px, 2.8vw, 30px);
+    letter-spacing: 0;
+  }
+
+  .brand-subtitle {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .header-logo {
+    display: block;
+    width: 190px;
+    height: auto;
+    border-radius: 5px;
+    background: #fff;
+    border: 1px solid rgba(217, 224, 228, 0.9);
+    padding: 5px;
+    box-shadow: 0 6px 16px rgba(23, 33, 38, 0.10);
+  }
+
+  .game-top .header-logo {
+    width: 150px;
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  .start-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.95fr) minmax(340px, 1.25fr);
+    gap: 22px;
+    width: min(1180px, calc(100vw - 32px));
+    margin: 24px auto;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 0 rgba(23, 33, 38, 0.03);
+  }
+
+  .panel-head {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel-head h2,
+  .panel-head h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .panel-body {
+    padding: 18px;
+  }
+
+  .rule-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .rule-row {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 12px;
+    align-items: start;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rule-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .badge.high,
+  .priority-btn.high {
+    background: var(--high);
+  }
+
+  .badge.mid,
+  .priority-btn.mid {
+    background: var(--mid);
+  }
+
+  .badge.low,
+  .priority-btn.low {
+    background: var(--low);
+  }
+
+  .badge.neutral {
+    background: var(--blue);
+  }
+
+  .badge.unread {
+    background: var(--accent);
+  }
+
+  .badge.completed {
+    background: var(--muted);
+  }
+
+  .level-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .level-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: center;
+    width: 100%;
+    padding: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    text-align: left;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .level-card:hover {
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+  }
+
+  .level-title {
+    display: block;
+    color: var(--primary-strong);
+    font-size: 18px;
+  }
+
+  .level-desc {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .level-chip {
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+
+  .setting-block {
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+
+  .setting-label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .segmented {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .segmented button {
+    min-height: 36px;
+    padding: 6px 10px;
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  .segmented button.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+
+  .note-strip {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    color: #4c2b20;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .game-shell {
+    height: 100vh;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .game-top {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px clamp(12px, 2vw, 24px);
+    background: var(--primary-strong);
+    color: #fff;
+  }
+
+  .session-title {
+    min-width: 0;
+  }
+
+  .session-title strong {
+    display: block;
+    font-size: 18px;
+  }
+
+  .session-title span {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 13px;
+  }
+
+  .game-metrics {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .metric {
+    min-width: 82px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  .metric-label {
+    display: block;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .metric-value {
+    display: block;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .header-btn {
+    min-height: 42px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    color: #fff;
+  }
+
+  .header-btn.danger {
+    background: #8f2830;
+    border-color: #a94349;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 330px minmax(0, 1fr) 360px;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .inbox {
+    min-height: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .inbox-head {
+    padding: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .inbox-head h2 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .inbox-stats {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .chat-list {
+    overflow: auto;
+    min-height: 0;
+  }
+
+  .chat-item {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    padding: 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    text-align: left;
+  }
+
+  .chat-item:hover,
+  .chat-item.active {
+    background: #edf4f5;
+  }
+
+  .chat-item.active {
+    box-shadow: inset 4px 0 0 var(--primary);
+  }
+
+  .chat-item.unread {
+    background: #ffffff;
+  }
+
+  .chat-item.unread .sender {
+    color: var(--focus);
+  }
+
+  .chat-item.completed {
+    color: var(--muted);
+    background: #eef1f3;
+  }
+
+  .chat-item.completed .preview {
+    color: #8a9ba5;
+  }
+
+  .chat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sender {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 800;
+  }
+
+  .preview {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 13px;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .conversation {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .conversation-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 62px;
+    padding: 14px 18px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .conversation-head h2 {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 18px;
+  }
+
+  .message-stage {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: clamp(16px, 3vw, 34px);
+  }
+
+  .empty-state {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .message-bubble {
+    max-width: 760px;
+    padding: 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 5px solid var(--primary);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 18px rgba(23, 33, 38, 0.06);
+    font-size: 18px;
+  }
+
+  .message-meta {
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .task-panel {
+    min-height: 0;
+    overflow: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+  }
+
+  .task-inner {
+    padding: 16px;
+  }
+
+  .step {
+    margin-bottom: 18px;
+  }
+
+  .step h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+
+  .priority-actions,
+  .choice-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .priority-btn {
+    min-height: 46px;
+    padding: 10px 12px;
+    color: #fff;
+    text-align: left;
+  }
+
+  .choice-btn {
+    min-height: 46px;
+    padding: 10px 12px;
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    text-align: left;
+  }
+
+  .choice-btn:hover {
+    border-color: var(--primary);
+    background: #eaf3f4;
+  }
+
+  .reply-area {
+    display: grid;
+    gap: 10px;
+  }
+
+  .target-text {
+    padding: 14px;
+    background: #f8fafb;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .target-text span {
+    border-bottom: 2px solid transparent;
+  }
+
+  .target-text .typed {
+    color: var(--low);
+    background: color-mix(in srgb, var(--low) 12%, white);
+  }
+
+  .target-text .wrong {
+    color: var(--high);
+    background: color-mix(in srgb, var(--high) 12%, white);
+  }
+
+  .typing-input {
+    width: 100%;
+    min-height: 50px;
+    padding: 12px;
+    border: 2px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--ink);
+    font-size: 17px;
+  }
+
+  .typing-input.success {
+    border-color: var(--low);
+    background: #f0faf5;
+  }
+
+  .progress-track {
+    height: 8px;
+    overflow: hidden;
+    background: var(--panel-soft);
+    border-radius: 999px;
+  }
+
+  .progress-fill {
+    width: 0%;
+    height: 100%;
+    background: var(--low);
+    transition: width 0.16s ease;
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 8px;
+  }
+
+  .primary-btn,
+  .secondary-btn,
+  .text-btn {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .primary-btn {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  .primary-btn:hover {
+    background: var(--primary-strong);
+  }
+
+  .secondary-btn {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .text-btn {
+    background: var(--panel-soft);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  .feedback-line {
+    min-height: 22px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .toast {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 50;
+    max-width: min(360px, calc(100vw - 36px));
+    padding: 12px 14px;
+    background: var(--primary-strong);
+    color: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    transform: translateY(16px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .app-logo-fixed {
+    display: none;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 28;
+    width: min(210px, 30vw);
+    height: auto;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(23, 33, 38, 0.24);
+    pointer-events: none;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: none;
+    place-items: center;
+    padding: 16px;
+    background: rgba(12, 20, 24, 0.62);
+  }
+
+  .modal-backdrop.show {
+    display: grid;
+  }
+
+  .modal {
+    width: min(440px, 100%);
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .modal-body {
+    padding: 22px;
+    text-align: center;
+  }
+
+  .modal-body h2 {
+    margin: 0 0 8px;
+    color: var(--high);
+    font-size: 24px;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 22px 22px;
+  }
+
+  .pause-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: none;
+    place-items: center;
+    background: rgba(246, 247, 249, 0.88);
+    backdrop-filter: blur(3px);
+  }
+
+  .pause-overlay.show {
+    display: grid;
+  }
+
+  .pause-card {
+    width: min(380px, calc(100vw - 32px));
+    padding: 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+
+  .result-layout {
+    width: min(1120px, calc(100vw - 32px));
+    margin: 24px auto;
+    display: grid;
+    gap: 18px;
+  }
+
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .score-card {
+    padding: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .score-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .score-card strong {
+    display: block;
+    margin-top: 4px;
+    color: var(--primary-strong);
+    font-size: clamp(24px, 4vw, 34px);
+    line-height: 1.1;
+  }
+
+  .insight-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .insight-list {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .insight-list li {
+    margin: 6px 0;
+  }
+
+  .table-wrap {
+    overflow: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+  }
+
+  th,
+  td {
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--panel-soft);
+    color: var(--primary-strong);
+    font-size: 12px;
+  }
+
+  .result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  body.comfortable {
+    font-size: 18px;
+  }
+
+  body.comfortable .workspace {
+    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+
+  body.comfortable .task-panel {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  body.comfortable .task-inner {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  @media (max-width: 1040px) {
+    .game-shell {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+    }
+
+    .start-layout,
+    .workspace,
+    .insight-grid,
+    .score-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .workspace {
+      min-height: auto;
+      height: auto;
+      overflow: visible;
+    }
+
+    body.comfortable .workspace {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+    }
+
+    .inbox,
+    .task-panel {
+      border: 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chat-list {
+      max-height: 320px;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .top-line,
+    .game-top,
+    .settings-grid,
+    .action-row,
+    .modal-actions,
+    body.comfortable .task-inner {
+      grid-template-columns: 1fr;
+    }
+
+    .game-top {
+      display: grid;
+    }
+
+    .game-metrics {
+      justify-content: stretch;
+    }
+
+    .metric,
+    .header-btn {
+      flex: 1 1 42%;
+    }
+
+    .rule-row {
+      grid-template-columns: 1fr;
+    }
+
+    .app-logo-fixed {
+      display: none;
+    }
+
+    .top-line .header-logo,
+    .game-top .header-logo {
+      width: 118px;
+    }
+
+    .game-top {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .game-metrics {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<img class="app-logo-fixed" src="上前津・移行.jpg" alt="Access Job 名古屋上前津 ロゴ">
+<main>
+  <section id="start-screen" class="screen active" aria-labelledby="app-title">
+    <header class="top-line">
+      <div class="brand">
+        <h1 id="app-title" class="brand-title">チャットタスク管理・タイピングトレーニング</h1>
+        <p class="brand-subtitle">就労移行支援事業所向け 職場シミュレーション</p>
+      </div>
+      <img class="header-logo" src="上前津・移行.jpg" alt="Access Job 名古屋上前津 ロゴ">
+    </header>
+
+    <div class="start-layout">
+      <section class="panel" aria-labelledby="criteria-title">
+        <div class="panel-head">
+          <h2 id="criteria-title">判定基準</h2>
+        </div>
+        <div class="panel-body rule-grid">
+          <div class="rule-row">
+            <span class="badge high">高</span>
+            <div><strong>至急対応。</strong> システム停止、重大なクレーム、本日中の締切、重要顧客の来訪。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge mid">中</span>
+            <div><strong>期限内に対応。</strong> 数日内の提出、通常の業務連絡、リマインド。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge low">低</span>
+            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge neutral">返信</span>
+            <div><strong>「返信不要」は送らず完了。</strong> 情報共有だけの連絡も返信しない判断が正解になる場合があります。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="level-title">
+        <div class="panel-head">
+          <h2 id="level-title">トレーニング開始</h2>
+        </div>
+        <div class="panel-body">
+          <div class="level-grid">
+            <button class="level-card" type="button" data-start-level="1">
+              <span>
+                <span class="level-title">Level 1 基礎</span>
+                <span class="level-desc">選択式で、優先度判断と返信不要の見極めを練習します。</span>
+              </span>
+              <span class="level-chip" id="level1-count">全問</span>
+            </button>
+            <button class="level-card" type="button" data-start-level="2">
+              <span>
+                <span class="level-title">Level 2 実践</span>
+                <span class="level-desc">制限時間内に、届くチャットを判断して正確に入力します。</span>
+              </span>
+              <span class="level-chip">タイピング</span>
+            </button>
+            <button class="level-card" type="button" data-start-level="3">
+              <span>
+                <span class="level-title">Level 3 応用</span>
+                <span class="level-desc">チャット処理に電話割り込みを加え、切り替え力を練習します。</span>
+              </span>
+              <span class="level-chip">割り込み</span>
+            </button>
+          </div>
+
+          <div class="settings-grid" aria-label="実施設定">
+            <div class="setting-block">
+              <span class="setting-label">制限時間</span>
+              <div class="segmented" id="duration-options">
+                <button type="button" data-duration="300">5分</button>
+                <button type="button" data-duration="600">10分</button>
+                <button type="button" data-duration="900">15分</button>
+              </div>
+            </div>
+            <div class="setting-block">
+              <span class="setting-label">表示</span>
+              <div class="segmented" id="display-options">
+                <button type="button" data-comfortable="false">標準</button>
+                <button type="button" data-comfortable="true">ゆったり</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="note-strip">結果画面では未完了タスクも含めてCSVに出力します。</div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section id="game-screen" class="screen" aria-labelledby="session-heading">
+    <div class="game-shell">
+      <header class="game-top">
+        <div class="session-title">
+          <strong id="session-heading">Level</strong>
+          <span id="session-subtitle">開始待ち</span>
+        </div>
+        <img class="header-logo" src="上前津・移行.jpg" alt="Access Job 名古屋上前津 ロゴ">
+        <div class="game-metrics" aria-label="進行状況">
+          <div class="metric">
+            <span class="metric-label">残り</span>
+            <span class="metric-value" id="timer">--:--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">完了</span>
+            <span class="metric-value" id="done-count">0</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">未完了</span>
+            <span class="metric-value" id="open-count">0</span>
+          </div>
+          <button class="header-btn" type="button" id="pause-btn">一時停止</button>
+          <button class="header-btn danger" type="button" id="finish-btn">終了</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="inbox" aria-labelledby="inbox-title">
+          <div class="inbox-head">
+            <h2 id="inbox-title">受信トレイ</h2>
+            <div class="inbox-stats">
+              <span id="unread-count">未読 0</span>
+              <span id="pending-count">保留 0</span>
+              <span id="completed-count">処理済 0</span>
+            </div>
+          </div>
+          <div class="chat-list" id="chat-list"></div>
+        </aside>
+
+        <section class="conversation" aria-labelledby="chat-heading">
+          <div class="conversation-head">
+            <h2 id="chat-heading">チャットを選択してください</h2>
+            <span class="badge neutral" id="chat-status-badge">待機</span>
+          </div>
+          <div class="message-stage" id="message-stage">
+            <div class="empty-state">左の受信トレイから未読または保留中のメッセージを選択してください。</div>
+          </div>
+        </section>
+
+        <aside class="task-panel" aria-labelledby="task-panel-title">
+          <div class="task-inner" id="task-panel-content">
+            <section class="step">
+              <h3 id="task-panel-title">処理ステップ</h3>
+              <p class="feedback-line">チャットを選ぶと操作パネルが表示されます。</p>
+            </section>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="result-screen" class="screen" aria-labelledby="result-title">
+    <header class="top-line">
+      <div class="brand">
+        <h1 id="result-title" class="brand-title">トレーニング結果</h1>
+        <p class="brand-subtitle" id="result-subtitle">振り返り</p>
+      </div>
+      <img class="header-logo" src="上前津・移行.jpg" alt="Access Job 名古屋上前津 ロゴ">
+    </header>
+
+    <div class="result-layout">
+      <div class="score-grid" id="score-grid"></div>
+      <div class="insight-grid" id="insight-grid"></div>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>要確認タスク</h2>
+        </div>
+        <div class="panel-body table-wrap" id="review-table"></div>
+      </section>
+      <div class="result-actions">
+        <button class="primary-btn" type="button" id="download-csv-btn">CSVをダウンロード</button>
+        <button class="text-btn" type="button" id="retry-btn">同じ条件でもう一度</button>
+        <button class="text-btn" type="button" id="menu-btn">メニューに戻る</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="phone-modal" role="dialog" aria-modal="true" aria-labelledby="phone-title">
+  <div class="modal">
+    <div class="modal-body">
+      <h2 id="phone-title">着信中</h2>
+      <p id="caller-name" style="font-size:22px; font-weight:800; margin:8px 0 12px;">相手の名前</p>
+      <p style="margin:0; color:var(--muted);">緊急性を判断して対応してください。</p>
+    </div>
+    <div class="modal-actions">
+      <button class="primary-btn" type="button" id="answer-phone-btn">応答する</button>
+      <button class="secondary-btn" type="button" id="ignore-phone-btn">無視する</button>
+    </div>
+  </div>
+</div>
+
+<div class="pause-overlay" id="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+  <div class="pause-card">
+    <h2 id="pause-title" style="margin-top:0;">一時停止中</h2>
+    <p style="color:var(--muted);">タイマー、チャット追加、電話着信を止めています。</p>
+    <button class="primary-btn" type="button" id="resume-btn">再開</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const LEVEL1_DATA = [
+    { sender: "田中部長", text: "顧客からクレームが入った。至急状況を確認して折り返してくれ。", prio: "high", options: ["至急確認し、対応いたします。", "明日確認します。", "関係ありません。"], correctOpt: 0, requiresReply: true },
+    { sender: "システム通知", text: "【重要】サーバーAがダウンしました。復旧作業を開始してください。", prio: "high", options: ["原因調査を開始します。", "了解しました。後でやります。", "分かりません。"], correctOpt: 0, requiresReply: true },
+    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", options: ["承知いたしました。拝読します。"], correctOpt: null, requiresReply: false },
+    { sender: "総務部", text: "健康診断の希望日を今週末までに提出してください。", prio: "mid", options: ["今日中に行きます。", "期日までに提出いたします。", "提出しません。"], correctOpt: 1, requiresReply: true },
+    { sender: "同僚の佐藤", text: "お疲れ様！来週の飲み会来れそう？", prio: "low", options: ["至急対応します！", "お疲れ様です。参加します！", "業務に集中してください。"], correctOpt: 1, requiresReply: true },
+    { sender: "経理部", text: "先月の経費精算書類に不備があります。修正して再提出してください。", prio: "mid", options: ["すぐ再提出します。", "後ほど確認し、修正いたします。", "間違っていません。"], correctOpt: 1, requiresReply: true },
+    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", options: ["読みました！"], correctOpt: null, requiresReply: false },
+    { sender: "営業の鈴木", text: "出張のお土産を買ってきたよ。休憩室に置いておきます。", prio: "low", options: ["ありがとうございます。後でいただきます。", "すぐ食べに行きます！", "いりません。"], correctOpt: 0, requiresReply: true },
+    { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "high", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
+    { sender: "受付", text: "C社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
+    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。（返信不要）", prio: "mid", options: ["承知いたしました。"], correctOpt: null, requiresReply: false }
+  ];
+
+  const TYPING_DATA = [
+    { sender: "顧客サポート", text: "A社様よりシステムにログインできないと重大なクレームが入っています。", prio: "high", reply: "至急状況を確認し、対応いたします。", requiresReply: true },
+    { sender: "経理部", text: "本日締切の振込手続きが1件漏れています。15時までに処理が必要です。", prio: "high", reply: "申し訳ございません。すぐに処理します。", requiresReply: true },
+    { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
+    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", reply: "拝読いたします。", requiresReply: false },
+    { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。どうなっていますか？", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
+    { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
+    { sender: "全社通知", text: "コンプライアンス委員からの今月の標語です。（返信不要）", prio: "low", reply: "確認いたしました。", requiresReply: false },
+    { sender: "総務部", text: "来月のオフィスレイアウト変更に伴う座席希望アンケートを金曜までに提出してください。", prio: "mid", reply: "承知いたしました。期日までに提出します。", requiresReply: true },
+    { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
+    { sender: "IT部門", text: "パスワードの定期変更期限が近づいています。5日以内に変更してください。", prio: "mid", reply: "承知いたしました。変更手続きを行います。", requiresReply: true },
+    { sender: "営業事務", text: "今月の売上見込データの入力をお願いします。水曜が締め切りです。", prio: "mid", reply: "承知いたしました。期日までに入力します。", requiresReply: true },
+    { sender: "総務部", text: "防災訓練のお知らせです。来月15日の14時から実施します。", prio: "mid", reply: "承知いたしました。スケジュールに登録します。", requiresReply: true },
+    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", reply: "お知らせありがとうございます。", requiresReply: false },
+    { sender: "営業の吉田", text: "取引先からお中元のメロンが届きました。休憩室で切り分けます。", prio: "low", reply: "ありがとうございます。後でいただきます。", requiresReply: true },
+    { sender: "システム通知", text: "メールボックスの容量が80%に達しました。不要なメールを削除してください。", prio: "low", reply: "確認いたしました。", requiresReply: true },
+    { sender: "労働組合", text: "組合費の使い道に関する意見募集ボックスを設置しました。（返信不要）", prio: "low", reply: "承知いたしました。", requiresReply: false },
+    { sender: "食堂", text: "今週のスペシャルメニューはカツカレーです！（返信不要）", prio: "low", reply: "美味しそうですね。", requiresReply: false },
+    { sender: "田中部長", text: "明日の会議は1時間遅らせる。資料の修正は不要。（返信不要）", prio: "mid", reply: "承知いたしました。", requiresReply: false },
+    { sender: "品質管理", text: "検査記録に未入力が1件あります。今週中に確認をお願いします。", prio: "mid", reply: "承知いたしました。今週中に確認します。", requiresReply: true },
+    { sender: "広報チーム", text: "社内報の写真募集を開始しました。任意参加です。（返信不要）", prio: "low", reply: "確認しました。", requiresReply: false }
+  ];
+
+  const PHONE_DATA = [
+    { caller: "重要顧客 A社 取締役", isEmergency: true },
+    { caller: "システム障害監視センター", isEmergency: true },
+    { caller: "社長", isEmergency: true },
+    { caller: "不動産投資の営業", isEmergency: false },
+    { caller: "別部署の同僚 飲み会の誘い", isEmergency: false },
+    { caller: "オフィス用品のセールス", isEmergency: false }
+  ];
+
+  const els = {
+    screens: Array.from(document.querySelectorAll(".screen")),
+    startButtons: Array.from(document.querySelectorAll("[data-start-level]")),
+    durationOptions: document.getElementById("duration-options"),
+    displayOptions: document.getElementById("display-options"),
+    level1Count: document.getElementById("level1-count"),
+    sessionHeading: document.getElementById("session-heading"),
+    sessionSubtitle: document.getElementById("session-subtitle"),
+    timer: document.getElementById("timer"),
+    doneCount: document.getElementById("done-count"),
+    openCount: document.getElementById("open-count"),
+    unreadCount: document.getElementById("unread-count"),
+    pendingCount: document.getElementById("pending-count"),
+    completedCount: document.getElementById("completed-count"),
+    chatList: document.getElementById("chat-list"),
+    chatHeading: document.getElementById("chat-heading"),
+    chatBadge: document.getElementById("chat-status-badge"),
+    messageStage: document.getElementById("message-stage"),
+    taskPanel: document.getElementById("task-panel-content"),
+    pauseBtn: document.getElementById("pause-btn"),
+    finishBtn: document.getElementById("finish-btn"),
+    pauseOverlay: document.getElementById("pause-overlay"),
+    resumeBtn: document.getElementById("resume-btn"),
+    phoneModal: document.getElementById("phone-modal"),
+    callerName: document.getElementById("caller-name"),
+    answerPhone: document.getElementById("answer-phone-btn"),
+    ignorePhone: document.getElementById("ignore-phone-btn"),
+    toast: document.getElementById("toast"),
+    resultSubtitle: document.getElementById("result-subtitle"),
+    scoreGrid: document.getElementById("score-grid"),
+    insightGrid: document.getElementById("insight-grid"),
+    reviewTable: document.getElementById("review-table"),
+    downloadCsv: document.getElementById("download-csv-btn"),
+    retry: document.getElementById("retry-btn"),
+    menu: document.getElementById("menu-btn")
+  };
+
+  const labels = {
+    high: "高",
+    mid: "中",
+    low: "低",
+    unread: "未読",
+    unreplied: "保留",
+    completed: "処理済"
+  };
+
+  const state = {
+    level: 1,
+    durationSec: 600,
+    comfortable: false,
+    timeRemaining: 0,
+    chats: [],
+    pool: [],
+    nextPoolIndex: 0,
+    activeId: null,
+    idSeed: 0,
+    records: [],
+    phoneRecords: [],
+    currentPhone: null,
+    paused: false,
+    gameOver: false,
+    timerId: null,
+    chatTimerId: null,
+    phoneTimerId: null,
+    lastLevel: 1
+  };
+
+  function init() {
+    els.level1Count.textContent = `${LEVEL1_DATA.length}問`;
+    loadSettings();
+    bindEvents();
+    renderSettings();
+  }
+
+  function bindEvents() {
+    els.startButtons.forEach((button) => {
+      button.addEventListener("click", () => startGame(Number(button.dataset.startLevel)));
+    });
+
+    els.durationOptions.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-duration]");
+      if (!button) return;
+      state.durationSec = Number(button.dataset.duration);
+      saveSettings();
+      renderSettings();
+    });
+
+    els.displayOptions.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-comfortable]");
+      if (!button) return;
+      state.comfortable = button.dataset.comfortable === "true";
+      saveSettings();
+      renderSettings();
+    });
+
+    els.pauseBtn.addEventListener("click", togglePause);
+    els.resumeBtn.addEventListener("click", togglePause);
+    els.finishBtn.addEventListener("click", () => endGame("manual"));
+    els.answerPhone.addEventListener("click", () => handlePhone(true));
+    els.ignorePhone.addEventListener("click", () => handlePhone(false));
+    els.downloadCsv.addEventListener("click", downloadCSV);
+    els.retry.addEventListener("click", () => startGame(state.lastLevel));
+    els.menu.addEventListener("click", () => showScreen("start-screen"));
+
+    document.addEventListener("keydown", (event) => {
+      if (!document.getElementById("game-screen").classList.contains("active")) return;
+      if (event.key === "Escape" && !els.phoneModal.classList.contains("show")) {
+        togglePause();
+      }
+      if (event.altKey && ["1", "2", "3"].includes(event.key)) {
+        const prio = { "1": "high", "2": "mid", "3": "low" }[event.key];
+        const chat = getActiveChat();
+        if (chat && chat.status === "unread") setPriority(prio);
+      }
+    });
+  }
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem("chatTypingTrainingSettings");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if ([300, 600, 900].includes(parsed.durationSec)) state.durationSec = parsed.durationSec;
+      state.comfortable = Boolean(parsed.comfortable);
+    } catch {
+      state.durationSec = 600;
+      state.comfortable = false;
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem("chatTypingTrainingSettings", JSON.stringify({
+        durationSec: state.durationSec,
+        comfortable: state.comfortable
+      }));
+    } catch {
+      // Shared classroom PCs can block localStorage. Training still works without saved settings.
+    }
+  }
+
+  function renderSettings() {
+    document.body.classList.toggle("comfortable", state.comfortable);
+    els.durationOptions.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("active", Number(button.dataset.duration) === state.durationSec);
+    });
+    els.displayOptions.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("active", (button.dataset.comfortable === "true") === state.comfortable);
+    });
+  }
+
+  function startGame(level) {
+    resetTimers();
+    state.level = level;
+    state.lastLevel = level;
+    state.timeRemaining = level === 1 ? 0 : state.durationSec;
+    state.chats = [];
+    state.records = [];
+    state.phoneRecords = [];
+    state.currentPhone = null;
+    state.activeId = null;
+    state.idSeed = 0;
+    state.gameOver = false;
+    state.paused = false;
+    state.nextPoolIndex = 0;
+    els.phoneModal.classList.remove("show");
+    els.pauseOverlay.classList.remove("show");
+
+    if (level === 1) {
+      state.pool = [];
+      LEVEL1_DATA.forEach((data) => state.chats.push(createChat(data)));
+    } else {
+      state.pool = shuffle(TYPING_DATA);
+      for (let index = 0; index < Math.min(4, state.pool.length); index += 1) {
+        addNextTypingChat();
+      }
+      state.timerId = window.setInterval(gameTick, 1000);
+      scheduleNextChat();
+      if (level === 3) scheduleNextPhone();
+    }
+
+    els.sessionHeading.textContent = `Level ${level}`;
+    els.sessionSubtitle.textContent = getLevelSubtitle(level);
+    showScreen("game-screen");
+    clearSelection();
+    renderAll();
+  }
+
+  function getLevelSubtitle(level) {
+    if (level === 1) return "選択式・全件完了で終了";
+    if (level === 2) return `${Math.round(state.durationSec / 60)}分・タイピング式`;
+    return `${Math.round(state.durationSec / 60)}分・タイピング式・電話割り込み`;
+  }
+
+  function createChat(data) {
+    return {
+      id: state.idSeed += 1,
+      sender: data.sender,
+      text: data.text,
+      correctPrio: data.prio,
+      options: data.options || [],
+      correctOpt: data.correctOpt,
+      reply: data.reply || "",
+      requiresReply: data.requiresReply,
+      status: "unread",
+      selectedPrio: null,
+      selectedReply: "",
+      selectedAction: "",
+      draft: "",
+      createdAt: Date.now(),
+      openedAt: null,
+      prioAt: null,
+      completedAt: null,
+      isPrioCorrect: null,
+      isReplyCorrect: null
+    };
+  }
+
+  function addNextTypingChat() {
+    if (state.nextPoolIndex >= state.pool.length) return;
+    const chat = createChat(state.pool[state.nextPoolIndex]);
+    state.nextPoolIndex += 1;
+    state.chats.unshift(chat);
+    if (document.getElementById("game-screen").classList.contains("active")) {
+      showToast("新しいチャットが届きました。");
+    }
+  }
+
+  function scheduleNextChat(delay) {
+    window.clearTimeout(state.chatTimerId);
+    if (state.gameOver || state.level === 1 || state.nextPoolIndex >= state.pool.length) return;
+    const wait = delay || randomBetween(9000, 16000);
+    state.chatTimerId = window.setTimeout(() => {
+      if (state.gameOver) return;
+      if (state.paused) {
+        scheduleNextChat(1200);
+        return;
+      }
+      addNextTypingChat();
+      renderSidebar();
+      updateMetrics();
+      scheduleNextChat();
+    }, wait);
+  }
+
+  function scheduleNextPhone(delay) {
+    window.clearTimeout(state.phoneTimerId);
+    if (state.gameOver || state.level !== 3) return;
+    const wait = delay || randomBetween(22000, 38000);
+    state.phoneTimerId = window.setTimeout(() => {
+      if (state.gameOver) return;
+      if (state.paused) {
+        scheduleNextPhone(1200);
+        return;
+      }
+      showPhone();
+    }, wait);
+  }
+
+  function gameTick() {
+    if (state.gameOver || state.paused) return;
+    state.timeRemaining = Math.max(0, state.timeRemaining - 1);
+    updateMetrics();
+    if (state.timeRemaining <= 0) endGame("time");
+  }
+
+  function renderAll() {
+    renderSidebar();
+    renderActiveChat();
+    updateMetrics();
+  }
+
+  function renderSidebar() {
+    if (state.chats.length === 0) {
+      els.chatList.innerHTML = '<div class="empty-state">チャットはまだありません。</div>';
+      return;
+    }
+
+    els.chatList.innerHTML = state.chats.map((chat) => {
+      const badgeClass = chat.status === "completed" ? "completed" : chat.status === "unreplied" ? chat.selectedPrio : "unread";
+      const active = chat.id === state.activeId ? " active" : "";
+      const statusClass = chat.status === "completed" ? " completed" : chat.status === "unread" ? " unread" : "";
+      const statusText = chat.status === "unreplied" ? `保留 ${labels[chat.selectedPrio]}` : labels[chat.status];
+      return `
+        <button class="chat-item${active}${statusClass}" type="button" data-chat-id="${chat.id}">
+          <span class="chat-row">
+            <span class="sender">${escapeHtml(chat.sender)}</span>
+            <span class="badge ${badgeClass}">${escapeHtml(statusText)}</span>
+          </span>
+          <span class="preview">${escapeHtml(chat.text)}</span>
+        </button>
+      `;
+    }).join("");
+
+    els.chatList.querySelectorAll("[data-chat-id]").forEach((button) => {
+      button.addEventListener("click", () => selectChat(Number(button.dataset.chatId)));
+    });
+  }
+
+  function selectChat(id) {
+    const chat = state.chats.find((item) => item.id === id);
+    if (!chat) return;
+    state.activeId = id;
+    if (!chat.openedAt) chat.openedAt = Date.now();
+    renderAll();
+  }
+
+  function clearSelection() {
+    state.activeId = null;
+    els.chatHeading.textContent = "チャットを選択してください";
+    els.chatBadge.textContent = "待機";
+    els.chatBadge.className = "badge neutral";
+    els.messageStage.innerHTML = '<div class="empty-state">左の受信トレイから未読または保留中のメッセージを選択してください。</div>';
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>処理ステップ</h3>
+        <p class="feedback-line">チャットを選ぶと操作パネルが表示されます。</p>
+      </section>
+    `;
+  }
+
+  function renderActiveChat() {
+    const chat = getActiveChat();
+    if (!chat) {
+      clearSelection();
+      return;
+    }
+
+    els.chatHeading.textContent = chat.sender;
+    els.chatBadge.textContent = chat.status === "unreplied" ? `保留 ${labels[chat.selectedPrio]}` : labels[chat.status];
+    els.chatBadge.className = `badge ${chat.status === "unreplied" ? chat.selectedPrio : "neutral"}`;
+    els.messageStage.innerHTML = `
+      <article class="message-bubble">
+        <div class="message-meta">${formatElapsed(chat.createdAt)} に受信</div>
+        <div>${escapeHtml(chat.text)}</div>
+      </article>
+    `;
+
+    if (chat.status === "completed") {
+      renderCompletedPanel(chat);
+    } else if (chat.status === "unreplied") {
+      renderReplyPanel(chat);
+    } else {
+      renderPriorityPanel(chat);
+    }
+  }
+
+  function renderPriorityPanel(chat) {
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>STEP 1 優先度</h3>
+        <div class="priority-actions">
+          <button class="priority-btn high" type="button" data-prio="high">高 至急対応</button>
+          <button class="priority-btn mid" type="button" data-prio="mid">中 期限内に対応</button>
+          <button class="priority-btn low" type="button" data-prio="low">低 急がない</button>
+        </div>
+      </section>
+      <section class="step">
+        <p class="feedback-line">メッセージ本文の期限、影響範囲、相手を見て判断します。</p>
+      </section>
+    `;
+
+    els.taskPanel.querySelectorAll("[data-prio]").forEach((button) => {
+      button.addEventListener("click", () => setPriority(button.dataset.prio));
+    });
+  }
+
+  function setPriority(prio) {
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+    chat.selectedPrio = prio;
+    chat.status = "unreplied";
+    chat.prioAt = Date.now();
+    renderAll();
+    focusTypingInput();
+  }
+
+  function updateTypingProgress(chat) {
+    const progress = typingProgress(chat);
+    
+    const targetText = document.getElementById("target-text");
+    if (targetText) targetText.innerHTML = renderTarget(chat);
+
+    const input = document.getElementById("typing-input");
+    if (input) {
+      if (progress.done) {
+        input.classList.add("success");
+      } else {
+        input.classList.remove("success");
+      }
+    }
+
+    const progressFill = document.querySelector(".progress-fill");
+    if (progressFill) progressFill.style.width = `${progress.percent}%`;
+
+    const submitBtn = document.getElementById("submit-reply-btn");
+    if (submitBtn) {
+      if (progress.done) {
+        submitBtn.removeAttribute("disabled");
+      } else {
+        submitBtn.setAttribute("disabled", "true");
+      }
+    }
+
+    const feedback = document.getElementById("typing-feedback");
+    if (feedback) feedback.textContent = progress.feedback;
+  }
+
+  function renderReplyPanel(chat) {
+    if (state.level === 1) {
+      const options = chat.options.map((option, index) => `
+        <button class="choice-btn" type="button" data-option="${index}">${escapeHtml(option)}</button>
+      `).join("");
+      els.taskPanel.innerHTML = `
+        <section class="step">
+          <h3>STEP 2 返信処理</h3>
+          <div class="choice-list">${options}</div>
+        </section>
+        <section class="step">
+          <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
+          <p class="feedback-line">返信不要の連絡は、このボタンで処理します。</p>
+        </section>
+      `;
+      els.taskPanel.querySelectorAll("[data-option]").forEach((button) => {
+        button.addEventListener("click", () => finishChat({
+          action: "reply",
+          selectedReply: chat.options[Number(button.dataset.option)] || "",
+          optionIndex: Number(button.dataset.option)
+        }));
+      });
+      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", () => finishChat({
+        action: "no_reply",
+        selectedReply: ""
+      }));
+      return;
+    }
+
+    const progress = typingProgress(chat);
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>STEP 2 返信処理</h3>
+        <div class="reply-area">
+          <div class="target-text" id="target-text">${renderTarget(chat)}</div>
+          <input class="typing-input${progress.done ? " success" : ""}" id="typing-input" type="text" value="${escapeHtml(chat.draft)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="上の文章を入力してください">
+          <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress.percent}%"></div></div>
+          <div class="action-row">
+            <button class="primary-btn" type="button" id="submit-reply-btn" ${progress.done ? "" : "disabled"}>入力して返信</button>
+            <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
+          </div>
+          <p class="feedback-line" id="typing-feedback">${progress.feedback}</p>
+        </div>
+      </section>
+    `;
+
+    const input = els.taskPanel.querySelector("#typing-input");
+    input.addEventListener("input", () => {
+      chat.draft = input.value;
+      updateTypingProgress(chat);
+    });
+    input.addEventListener("paste", blockTextTransfer);
+    input.addEventListener("drop", blockTextTransfer);
+    els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", () => finishChat({
+      action: "reply",
+      selectedReply: chat.draft
+    }));
+    els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", () => finishChat({
+      action: "no_reply",
+      selectedReply: ""
+    }));
+  }
+
+  function renderCompletedPanel(chat) {
+    const prioText = chat.isPrioCorrect ? "優先度は正解です。" : `優先度は ${labels[chat.correctPrio]} が正解です。`;
+    const replyText = chat.isReplyCorrect ? "返信処理は正解です。" : getReplyCorrection(chat);
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>処理済</h3>
+        <p class="feedback-line">${escapeHtml(prioText)}</p>
+        <p class="feedback-line">${escapeHtml(replyText)}</p>
+      </section>
+    `;
+  }
+
+  function getReplyCorrection(chat) {
+    if (!chat.requiresReply) return "返信せずに完了するのが正解です。";
+    if (state.level === 1 && chat.correctOpt !== null) return `正しい返信は「${chat.options[chat.correctOpt]}」です。`;
+    return `正しい返信は「${chat.reply}」です。`;
+  }
+
+  function focusTypingInput(keepCursor) {
+    window.requestAnimationFrame(() => {
+      const input = document.getElementById("typing-input");
+      if (!input) return;
+      input.focus();
+      if (keepCursor) {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    });
+  }
+
+  function blockTextTransfer(event) {
+    event.preventDefault();
+    showToast("コピー、貼り付け、ドラッグ入力は使えません。");
+  }
+
+  function finishChat(result) {
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+
+    chat.status = "completed";
+    chat.completedAt = Date.now();
+    chat.selectedAction = result.action;
+    chat.selectedReply = result.selectedReply || "";
+    chat.isPrioCorrect = chat.correctPrio === chat.selectedPrio;
+
+    if (result.action === "no_reply") {
+      chat.isReplyCorrect = chat.requiresReply === false;
+    } else if (state.level === 1) {
+      chat.isReplyCorrect = chat.requiresReply === true && result.optionIndex === chat.correctOpt;
+    } else {
+      chat.isReplyCorrect = chat.requiresReply === true && normalize(chat.selectedReply) === normalize(chat.reply);
+    }
+
+    state.records.push(chat);
+    state.activeId = null;
+    renderAll();
+    clearSelection();
+
+    if (state.level === 1 && state.chats.every((item) => item.status === "completed")) {
+      endGame("complete");
+    }
+  }
+
+  function showPhone() {
+    state.currentPhone = PHONE_DATA[randomBetween(0, PHONE_DATA.length - 1)];
+    els.callerName.textContent = state.currentPhone.caller;
+    els.phoneModal.classList.add("show");
+    els.answerPhone.focus();
+  }
+
+  function handlePhone(didAnswer) {
+    if (!state.currentPhone) return;
+    const correct = state.currentPhone.isEmergency === didAnswer;
+    state.phoneRecords.push({
+      caller: state.currentPhone.caller,
+      isEmergency: state.currentPhone.isEmergency,
+      didAnswer,
+      correct,
+      at: Date.now()
+    });
+    els.phoneModal.classList.remove("show");
+    state.currentPhone = null;
+
+    if (didAnswer) {
+      state.activeId = null;
+      clearSelection();
+      els.chatHeading.textContent = "電話対応完了";
+      els.chatBadge.textContent = "復帰";
+      els.messageStage.innerHTML = '<div class="empty-state">電話対応が完了しました。受信トレイから作業を再開してください。</div>';
+    }
+
+    showToast(correct ? "電話判断を記録しました。" : "電話判断を記録しました。結果画面で確認できます。");
+    scheduleNextPhone();
+  }
+
+  function togglePause() {
+    if (state.gameOver || !document.getElementById("game-screen").classList.contains("active")) return;
+    state.paused = !state.paused;
+    els.pauseOverlay.classList.toggle("show", state.paused);
+    els.pauseBtn.textContent = state.paused ? "再開" : "一時停止";
+    if (!state.paused) {
+      scheduleNextChat(1500);
+      if (state.level === 3) scheduleNextPhone(2200);
+    }
+  }
+
+  function endGame(reason) {
+    if (state.gameOver) return;
+    state.gameOver = true;
+    resetTimers();
+    els.phoneModal.classList.remove("show");
+    els.pauseOverlay.classList.remove("show");
+    state.paused = false;
+    els.pauseBtn.textContent = "一時停止";
+    showResults(reason);
+  }
+
+  function showResults(reason) {
+    const summary = buildSummary();
+    els.resultSubtitle.textContent = `${getLevelSubtitle(state.level)} / ${getEndReason(reason)}`;
+    els.scoreGrid.innerHTML = `
+      ${scoreCard("完了", `${summary.completed}/${summary.total}`, "件")}
+      ${scoreCard("優先度", `${summary.prioAccuracy}`, "%")}
+      ${scoreCard("返信", `${summary.replyAccuracy}`, "%")}
+      ${scoreCard("平均処理", `${summary.averageTotal}`, "秒")}
+    `;
+
+    els.insightGrid.innerHTML = `
+      <section class="panel">
+        <div class="panel-head"><h2>よかった点</h2></div>
+        <div class="panel-body"><ul class="insight-list">${summary.strengths.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>次の練習</h2></div>
+        <div class="panel-body"><ul class="insight-list">${summary.nextSteps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      </section>
+    `;
+
+    renderReviewTable(summary.reviewRows);
+    showScreen("result-screen");
+  }
+
+  function buildSummary() {
+    const completed = state.chats.filter((chat) => chat.status === "completed");
+    const total = state.chats.length;
+    const prioAccuracy = percent(completed.filter((chat) => chat.isPrioCorrect).length, completed.length);
+    const replyAccuracy = percent(completed.filter((chat) => chat.isReplyCorrect).length, completed.length);
+    const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
+    const noReplyItems = completed.filter((chat) => !chat.requiresReply);
+    const noReplyAccuracy = percent(noReplyItems.filter((chat) => chat.isReplyCorrect).length, noReplyItems.length);
+    const phoneAccuracy = percent(state.phoneRecords.filter((phone) => phone.correct).length, state.phoneRecords.length);
+    const reviewRows = state.chats.filter((chat) => {
+      if (chat.status !== "completed") return true;
+      return !chat.isPrioCorrect || !chat.isReplyCorrect;
+    });
+
+    const strengths = [];
+    if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
+    if (prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
+    if (replyAccuracy >= 80) strengths.push("返信する、返信しないの切り分けが安定しています。");
+    if (state.level === 3 && state.phoneRecords.length > 0 && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
+    if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
+
+    const nextSteps = [];
+    if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未読を開く順番を意識しましょう。");
+    if (prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
+    if (replyAccuracy < 80) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。");
+    if (noReplyItems.length > 0 && noReplyAccuracy < 80) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+    if (state.level === 3 && state.phoneRecords.length > 0 && phoneAccuracy < 80) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
+    if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
+
+    if (state.level === 3) {
+      strengths.push(`電話対応: ${state.phoneRecords.length ? `${phoneAccuracy}%` : "発生なし"}`);
+    }
+
+    return {
+      total,
+      completed: completed.length,
+      prioAccuracy,
+      replyAccuracy,
+      averageTotal,
+      strengths,
+      nextSteps,
+      reviewRows
+    };
+  }
+
+  function renderReviewTable(rows) {
+    if (!rows.length) {
+      els.reviewTable.innerHTML = "<p>要確認タスクはありません。</p>";
+      return;
+    }
+
+    els.reviewTable.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>送信者</th>
+            <th>状態</th>
+            <th>優先度</th>
+            <th>返信</th>
+            <th>本文</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((chat) => `
+            <tr>
+              <td>${escapeHtml(chat.sender)}</td>
+              <td>${escapeHtml(labels[chat.status])}</td>
+              <td>${escapeHtml(formatPriorityResult(chat))}</td>
+              <td>${escapeHtml(formatReplyResult(chat))}</td>
+              <td>${escapeHtml(chat.text)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function scoreCard(label, value, unit) {
+    return `
+      <div class="score-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}<small style="font-size:14px;"> ${escapeHtml(unit)}</small></strong>
+      </div>
+    `;
+  }
+
+  function updateMetrics() {
+    const completed = state.chats.filter((chat) => chat.status === "completed").length;
+    const unread = state.chats.filter((chat) => chat.status === "unread").length;
+    const pending = state.chats.filter((chat) => chat.status === "unreplied").length;
+    const open = state.chats.length - completed;
+    els.timer.textContent = state.level === 1 ? "全件" : formatTime(state.timeRemaining);
+    els.doneCount.textContent = completed;
+    els.openCount.textContent = open;
+    els.unreadCount.textContent = `未読 ${unread}`;
+    els.pendingCount.textContent = `保留 ${pending}`;
+    els.completedCount.textContent = `処理済 ${completed}`;
+  }
+
+  function resetTimers() {
+    window.clearInterval(state.timerId);
+    window.clearTimeout(state.chatTimerId);
+    window.clearTimeout(state.phoneTimerId);
+    state.timerId = null;
+    state.chatTimerId = null;
+    state.phoneTimerId = null;
+  }
+
+  function showScreen(id) {
+    if (id === "start-screen") {
+      resetTimers();
+      state.gameOver = true;
+      els.phoneModal.classList.remove("show");
+      els.pauseOverlay.classList.remove("show");
+    }
+    els.screens.forEach((screen) => screen.classList.toggle("active", screen.id === id));
+    renderSettings();
+  }
+
+  function downloadCSV() {
+    const rows = state.chats.map(toCsvRow);
+    if (rows.length === 0) {
+      showToast("出力するデータがありません。");
+      return;
+    }
+    const header = [
+      "レベル",
+      "状態",
+      "送信者",
+      "メッセージ内容",
+      "正解優先度",
+      "選択優先度",
+      "優先度正誤",
+      "返信必要",
+      "選択処理",
+      "返信正誤",
+      "確認時間(秒)",
+      "振り分け時間(秒)",
+      "返信時間(秒)",
+      "総処理時間(秒)"
+    ];
+    const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    link.href = url;
+    link.download = `task_training_result_L${state.level}_${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function toCsvRow(chat) {
+    return [
+      `Level ${state.level}`,
+      labels[chat.status],
+      chat.sender,
+      chat.text,
+      labels[chat.correctPrio],
+      chat.selectedPrio ? labels[chat.selectedPrio] : "",
+      chat.isPrioCorrect === null ? "" : chat.isPrioCorrect ? "正解" : "不正解",
+      chat.requiresReply ? "必要" : "不要",
+      chat.selectedAction === "reply" ? "返信" : chat.selectedAction === "no_reply" ? "返信せず完了" : "",
+      chat.isReplyCorrect === null ? "" : chat.isReplyCorrect ? "正解" : "不正解",
+      chat.openedAt ? secondsBetween(chat.createdAt, chat.openedAt) : "",
+      chat.prioAt ? secondsBetween(chat.openedAt, chat.prioAt) : "",
+      chat.completedAt ? secondsBetween(chat.prioAt, chat.completedAt) : "",
+      chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : ""
+    ];
+  }
+
+  function formatPriorityResult(chat) {
+    if (chat.status !== "completed") return `正解: ${labels[chat.correctPrio]}`;
+    return `${chat.isPrioCorrect ? "正解" : "不正解"} / 正解: ${labels[chat.correctPrio]} / 選択: ${labels[chat.selectedPrio]}`;
+  }
+
+  function formatReplyResult(chat) {
+    if (chat.status !== "completed") return chat.requiresReply ? "返信必要" : "返信不要";
+    return `${chat.isReplyCorrect ? "正解" : "不正解"} / ${chat.requiresReply ? "返信必要" : "返信不要"}`;
+  }
+
+  function getActiveChat() {
+    return state.chats.find((chat) => chat.id === state.activeId) || null;
+  }
+
+  function renderTarget(chat) {
+    const draft = normalize(chat.draft);
+    const target = normalize(chat.reply);
+    const chars = Array.from(chat.reply);
+    let normalizedIndex = 0;
+    return chars.map((char) => {
+      if (/\s/.test(char)) return escapeHtml(char);
+      const targetChar = target[normalizedIndex] || "";
+      const typedChar = draft[normalizedIndex];
+      normalizedIndex += 1;
+      if (typedChar === undefined) return `<span>${escapeHtml(char)}</span>`;
+      if (typedChar === targetChar) return `<span class="typed">${escapeHtml(char)}</span>`;
+      return `<span class="wrong">${escapeHtml(char)}</span>`;
+    }).join("");
+  }
+
+  function typingProgress(chat) {
+    const draft = normalize(chat.draft);
+    const target = normalize(chat.reply);
+    const matched = commonPrefixLength(draft, target);
+    const percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
+    const done = draft === target && target.length > 0;
+    const feedback = done ? "入力が一致しました。送信できます。" : `一致 ${matched}/${target.length} 文字`;
+    return { percent: percentValue, done, feedback };
+  }
+
+  function commonPrefixLength(a, b) {
+    const max = Math.min(a.length, b.length);
+    let index = 0;
+    while (index < max && a[index] === b[index]) index += 1;
+    return index;
+  }
+
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, "");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function csvEscape(value) {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  function percent(numerator, denominator) {
+    if (!denominator) return 0;
+    return Math.round((numerator / denominator) * 100);
+  }
+
+  function average(values) {
+    const valid = values.filter((value) => Number.isFinite(value));
+    if (!valid.length) return "0.0";
+    return (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1);
+  }
+
+  function secondsBetween(start, end) {
+    if (!start || !end) return "";
+    return ((end - start) / 1000).toFixed(1);
+  }
+
+  function formatTime(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  }
+
+  function formatElapsed(timestamp) {
+    const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if (seconds < 60) return `${seconds}秒前`;
+    return `${Math.floor(seconds / 60)}分前`;
+  }
+
+  function getEndReason(reason) {
+    if (reason === "time") return "時間終了";
+    if (reason === "complete") return "全件完了";
+    return "手動終了";
+  }
+
+  function randomBetween(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function shuffle(items) {
+    const copy = [...items];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomBetween(0, index);
+      [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+    }
+    return copy;
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    window.clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.classList.add("show");
+    toastTimer = window.setTimeout(() => els.toast.classList.remove("show"), 2400);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
