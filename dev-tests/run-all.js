@@ -16,6 +16,7 @@ const SUITES = [
   ["e2e04_gameqa",      "ゲームQA手法10種",                                "long"],
   ["e2e01_playthrough", "模擬プレイスルー（時間切れ経路を含む）",          "long"],
   ["e2e08_judgment",    "判定マトリクス総当たり（誤判定ゼロ）",            "long"],
+  ["e2e09_humanpace",   "人間の速度でのプレイ（体感の理不尽さ・Enter送信・狭い画面の結果画面）", "long"],
 ];
 
 const quick = !!process.env.QUICK;

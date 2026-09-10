@@ -1814,6 +1814,13 @@
     });
     input.addEventListener("paste", blockTextTransfer);
     input.addEventListener("drop", blockTextTransfer);
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      // IME の変換確定の Enter（isComposing / keyCode 229）は送信に使わない
+      if (event.isComposing || event.keyCode === 229) return;
+      event.preventDefault();
+      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft });
+    });
     els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", () => finishChat({
       action: "reply",
       selectedReply: chat.draft
