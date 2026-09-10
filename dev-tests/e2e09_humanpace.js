@@ -14,7 +14,7 @@ const CHAR_MS = 1500;          // 40文字/分 ≒ 1.5秒/文字（かな入力�
 const READ_MS_PER_CHAR = 120;  // 本文を読む速度（短縮。実際は250ms程度）
 const THINK_MS = 1500;         // 優先度を決める間
 
-async function humanSolve(page, data, R, level) {
+async function humanSolve(page, data, R, level, speed) {
   const openItems = page.locator(sel.openChats);
   if (!(await openItems.count())) return false;
   await openItems.first().click(); await page.waitForTimeout(300);
@@ -24,20 +24,22 @@ async function humanSolve(page, data, R, level) {
   await page.waitForTimeout(Math.min(6000, a.text.length * READ_MS_PER_CHAR));    // 読む
   await page.waitForTimeout(THINK_MS);                                              // 考える
   if (await page.locator(sel.phone).count()) return "phone";
-  await page.click(sel.prio(a.prio)); await page.waitForTimeout(900);              // 人間は次の操作まで 1 秒前後空く
+  try { await page.click(sel.prio(a.prio), { timeout: 4000 }); } catch (_) { return "phone"; }
+  await page.waitForTimeout(900);                                                   // 人間は次の操作まで 1 秒前後空く
   if (a.req) {
     // 一文字ずつゆっくり打つ。途中で着信が来たら中断して戻る
     await page.locator(sel.input).fill("");
     for (const ch of a.reply) {
       if (await page.locator(sel.phone).count()) return "phone";
-      await page.keyboard.type(ch); await page.waitForTimeout(CHAR_MS / 4);         // 4倍速（テスト時間の都合）。比率は維持
+      await page.keyboard.type(ch); await page.waitForTimeout(CHAR_MS / speed);     // Level 2 は速めの人(4倍速)、Level 3 は本当にゆっくり(1倍速)
     }
     await page.waitForTimeout(400);
     if (await page.locator(sel.submit).isDisabled()) { R.ok(`H-${a.sender}`, false, "ゆっくり打っても一致しない: " + a.reply); return true; }
     await page.keyboard.press("Enter");                                             // Enter で送信
     await page.waitForTimeout(250);
   } else {
-    await page.click(sel.noReply); await page.waitForTimeout(250);
+    try { await page.click(sel.noReply, { timeout: 4000 }); } catch (_) { return "phone"; }
+    await page.waitForTimeout(250);
   }
   return true;
 }
@@ -49,8 +51,11 @@ async function humanSolve(page, data, R, level) {
   // ---------- Enter 送信と 0.4秒ガードの人間操作との相性 ----------
   R.section("Enter 送信 / 二重クリック防止ガードが人間の操作を邪魔しないか");
   await start(page, 2, 300);
-  await page.locator(sel.chatItems).first().click(); await page.waitForTimeout(300);
-  let a = findAnswer(data, await activeChatBody(page), 2);
+  let a = null;
+  for (let i = 0; i < (await page.locator(sel.chatItems).count()) && !(a && a.req); i++) {
+    await page.locator(sel.chatItems).nth(i).click(); await page.waitForTimeout(250);
+    a = findAnswer(data, await activeChatBody(page), 2);
+  }
   await page.click(sel.prio(a.prio)); await page.waitForTimeout(700);              // 人間の間（0.7秒）→ ガード(0.4秒)より後
   const c0 = await counters(page);
   if (a.req) {
@@ -75,7 +80,7 @@ async function humanSolve(page, data, R, level) {
 
   // ---------- 人間の速度で Level 2 → 5分 ----------
   for (const level of [2, 3]) {
-    R.section(`Level ${level} を「ゆっくりな人」の速度で 5分プレイ（打鍵 1.5秒/文字 相当・読む間・考える間）`);
+    R.section(`Level ${level} を人間の速度で 5分プレイ（Level 2: 速めの人 約160字/分、Level 3: ゆっくりな人 約40字/分・読む間・考える間）`);
     await start(page, level, 300);
     const t0 = Date.now(); let done = 0, phones = 0, phoneOk = 0;
     while (Date.now() - t0 < 320000) {
@@ -88,7 +93,7 @@ async function humanSolve(page, data, R, level) {
         await page.click(rec.isEmergency ? sel.answer : sel.ignore); await page.waitForTimeout(300);
         continue;
       }
-      const r = await humanSolve(page, data, R, level);
+      const r = await humanSolve(page, data, R, level, level === 2 ? 4 : 1);
       if (r === "phone") continue;
       if (!r) { await page.waitForTimeout(1500); continue; }
       done++;
@@ -109,7 +114,8 @@ async function humanSolve(page, data, R, level) {
       return ids.map((id) => { const el = document.getElementById(id); el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return (top && (el === top || el.contains(top))) ? null : id; }).filter(Boolean);
     });
     const tableScroll = await page.evaluate(() => { const w = document.querySelector("#review-table"); return w ? w.scrollWidth <= w.clientWidth + 2 || getComputedStyle(w).overflowX !== "visible" : true; });
-    R.ok(`AE-結果-L${level}`, reach.length === 0 && tableScroll, `390px幅・${(await page.locator("#review-table tbody tr").count())}行の要確認表でも CSV/再挑戦/メニュー が押せ、表は横スクロールで収まる`);
+    const rowsN = await page.locator("#review-table tbody tr").count();
+    R.ok(`AE-結果-L${level}`, reach.length === 0 && tableScroll, `390px幅・要確認表 ${rowsN} 行でも CSV/再挑戦/メニュー が押せ、表は横スクロールで収まる`);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.click(sel.menu);
   }
