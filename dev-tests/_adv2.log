@@ -1,0 +1,16 @@
+
+#### e2e05_adversarial ####
+
+--- 連打・二重操作 ---
+  [OK] C-1 優先度ボタン6連打でも保留のまま（返信パネルの同位置ボタンが誤爆しない）
+  [OK] C-dbl-high 「high」をダブルクリックしても返信は確定しない
+  [OK] C-dbl-mid 「mid」をダブルクリックしても返信は確定しない
+  [OK] C-dbl-low 「low」をダブルクリックしても返信は確定しない
+  [OK] C-2 返信ボタン8連打で処理済が +1 件のみ
+SUITE CRASH: page.click: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-prio="mid"]')[22m
+
+    at /home/user/Chat-Task-Management-Typing-Training/dev-tests/e2e05_adversarial.js:28:64 {
+  name: 'TimeoutError'
+}

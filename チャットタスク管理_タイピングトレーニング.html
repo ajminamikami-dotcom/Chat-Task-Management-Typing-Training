@@ -1335,6 +1335,7 @@
     phoneRecords: [],
     lastPhone: null,
     focusBeforePhone: null,
+    panelShownAt: 0,
     endsAt: 0,
     pausedAt: 0,
     currentPhone: null,
@@ -1395,6 +1396,13 @@
     els.retry.addEventListener("click", () => startGame(state.lastLevel));
     els.menu.addEventListener("click", () => showScreen("start-screen"));
 
+    // セッション中に F5 やタブ閉じで進行が消えないよう、ブラウザの確認を出す。
+    window.addEventListener("beforeunload", (event) => {
+      if (!document.getElementById("game-screen").classList.contains("active") || state.gameOver) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
     document.addEventListener("keydown", (event) => {
       if (!document.getElementById("game-screen").classList.contains("active")) return;
       if (event.key === "Escape") {
@@ -1404,6 +1412,7 @@
         if (!target || target.id !== "typing-input") togglePause();
       }
       if (event.altKey && ["1", "2", "3"].includes(event.key)) {
+        if (state.paused || els.phoneModal.classList.contains("show")) return;
         const prio = { "1": "high", "2": "mid", "3": "low" }[event.key];
         const chat = getActiveChat();
         if (chat && chat.status === "unread") setPriority(prio);
@@ -1584,6 +1593,9 @@
   }
 
   function renderSidebar() {
+    const focused = document.activeElement;
+    const focusedChatId = focused && focused.dataset && focused.dataset.chatId
+      ? Number(focused.dataset.chatId) : null;
     if (state.chats.length === 0) {
       els.chatList.innerHTML = '<div class="empty-state">チャットはまだありません。</div>';
       return;
@@ -1608,9 +1620,17 @@
     els.chatList.querySelectorAll("[data-chat-id]").forEach((button) => {
       button.addEventListener("click", () => selectChat(Number(button.dataset.chatId)));
     });
+
+    // 再描画で受信トレイ内のフォーカスが失われると、キーボード操作の人は
+    // 新着のたびに位置を見失う。同じチャットのボタンにフォーカスを戻す。
+    if (focusedChatId !== null) {
+      const again = els.chatList.querySelector(`[data-chat-id="${focusedChatId}"]`);
+      if (again) again.focus();
+    }
   }
 
   function selectChat(id) {
+    if (state.gameOver) return;
     const chat = state.chats.find((item) => item.id === id);
     if (!chat) return;
     state.activeId = id;
@@ -1679,6 +1699,7 @@
   }
 
   function setPriority(prio) {
+    if (state.gameOver || state.paused) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.selectedPrio = prio;
@@ -1690,6 +1711,7 @@
 
   // 優先度の選び直し。入力途中の下書きは保持する。
   function reopenPriority() {
+    if (state.gameOver || state.paused) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.status = "unread";
@@ -1730,6 +1752,9 @@
   }
 
   function renderReplyPanel(chat) {
+    // 優先度ボタンをダブルクリックすると2回目のクリックがこのパネルに落ちるため、
+    // 表示直後の短い間は「完了」操作を受け付けない（表示は変えない）。
+    state.panelShownAt = Date.now();
     if (state.level === 1) {
       const options = chat.options.map((option, index) => `
         <button class="choice-btn" type="button" data-option="${index}">${escapeHtml(option)}</button>
@@ -1837,6 +1862,8 @@
   }
 
   function finishChat(result) {
+    if (state.gameOver || state.paused) return;
+    if (Date.now() - state.panelShownAt < 400) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
 
@@ -1880,7 +1907,7 @@
   }
 
   function handlePhone(didAnswer) {
-    if (!state.currentPhone) return;
+    if (!state.currentPhone || state.gameOver || state.paused) return;
     const correct = state.currentPhone.isEmergency === didAnswer;
     state.phoneRecords.push({
       caller: state.currentPhone.caller,
@@ -1923,6 +1950,8 @@
       state.pausedAt = Date.now();
       // 着信中に一時停止した場合、再開するまで着信画面を伏せておく。
       if (state.currentPhone) els.phoneModal.classList.remove("show");
+      // 背面のボタンに Enter が届かないよう、フォーカスを停止画面へ移す。
+      els.resumeBtn.focus();
     } else {
       if (state.pausedAt) state.endsAt += Date.now() - state.pausedAt;
       state.pausedAt = 0;

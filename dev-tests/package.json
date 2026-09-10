@@ -1,0 +1,14 @@
+{
+  "name": "chat-task-training-dev-tests",
+  "private": true,
+  "description": "チャットタスク管理・タイピングトレーニング 恒久検査スイート（Playwright / Chromium）",
+  "scripts": {
+    "test": "node run-all.js",
+    "data": "node e2e07_data.js",
+    "ideal": "node e2e02_ideal.js",
+    "softlock": "node e2e03_softlock.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

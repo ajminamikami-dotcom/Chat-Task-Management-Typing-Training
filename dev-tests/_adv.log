@@ -1,0 +1,12 @@
+
+#### e2e05_adversarial ####
+
+--- 連打・二重操作 ---
+  [NG] C-1 優先度ボタン6連打でも状態は1回分
+SUITE CRASH: locator.click: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-option="0"]')[22m
+
+    at /home/user/Chat-Task-Management-Typing-Training/dev-tests/e2e05_adversarial.js:18:37 {
+  name: 'TimeoutError'
+}
