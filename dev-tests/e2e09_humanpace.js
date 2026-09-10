@@ -34,6 +34,8 @@ async function humanSolve(page, data, R, level, speed) {
       await page.keyboard.type(ch); await page.waitForTimeout(CHAR_MS / speed);     // Level 2 は速めの人(4倍速)、Level 3 は本当にゆっくり(1倍速)
     }
     await page.waitForTimeout(400);
+    if (await page.locator(sel.result).count()) return false;                       // 打っている最中に時間切れ（保留＋下書き保持で正しい）
+    if (await page.locator(sel.phone).count()) return "phone";
     if (await page.locator(sel.submit).isDisabled()) { R.ok(`H-${a.sender}`, false, "ゆっくり打っても一致しない: " + a.reply); return true; }
     await page.keyboard.press("Enter");                                             // Enter で送信
     await page.waitForTimeout(250);
