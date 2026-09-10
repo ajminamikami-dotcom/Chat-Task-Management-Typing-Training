@@ -140,10 +140,13 @@ async function handlePhoneIfAny(page, data, mode = "ideal") {
 
 // 1件のチャットを処理する。mode: ideal / wrong / random
 async function solveOne(page, data, mode = "ideal", typeDelay = 1) {
+  const phoneUp = async () => (await page.locator(sel.phone).count()) > 0;
+  if (await phoneUp()) return "phone";                 // 着信中は呼び出し側で応答/無視を決めてもらう
   const open = page.locator(sel.openChats);
   if (!(await open.count())) return false;
-  await open.first().click();
+  await open.first().click({ timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(90);
+  if (await phoneUp()) return "phone";                 // クリック直後に着信が入った
   const body = await activeChatBody(page);
   const a = findAnswer(data, body, await currentLevel(page));
   if (!a) throw new Error("正解表に無い本文: " + body.slice(0, 40));
@@ -151,7 +154,9 @@ async function solveOne(page, data, mode = "ideal", typeDelay = 1) {
   let prio = a.prio;
   if (mode === "wrong") prio = prios.find((p) => p !== a.prio);
   if (mode === "random") prio = prios[Math.floor(Math.random() * 3)];
-  if (await page.locator(sel.prio(prio)).count()) { await page.click(sel.prio(prio)); await page.waitForTimeout(450); }
+  if (await phoneUp()) return "phone";
+  if (await page.locator(sel.prio(prio)).count()) { await page.click(sel.prio(prio), { timeout: 5000 }); await page.waitForTimeout(450); }
+  if (await phoneUp()) return "phone";
   const wantReply = mode === "ideal" ? a.req : mode === "wrong" ? !a.req : Math.random() < 0.5;
   if (await page.locator(sel.option(0)).count()) {           // Level 1
     if (wantReply) {

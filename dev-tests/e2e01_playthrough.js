@@ -71,6 +71,7 @@ function recompute(rows) {
       const mode = r < 0.7 ? "ideal" : r < 0.9 ? "wrong" : "random";
       let did;
       try { did = await solveOne(page, data, mode, 8); } catch (e) { R.ok(`H-L${level}`, false, e.message); break; }
+      if (did === "phone") continue;                       // 着信は周回の先頭で応答/無視を決めて記録する
       if (!did) {
         if (level === 1) break;
         // Level 2: 手持ちが無ければ新着を待つ。時間切れまで待って終了経路を検証する
@@ -83,6 +84,12 @@ function recompute(rows) {
     }
 
     const endedByItself = await page.locator(sel.result).count() > 0;
+    if (!endedByItself && (await page.locator(sel.phone).count())) {   // 終了前の着信も記録に含める（AX の突合のため）
+      const who = await page.locator("#caller-name").innerText();
+      const rec = data.PHONE.find((p) => p.caller === who);
+      phoneLog.push({ who, correct: true });
+      await page.click(rec.isEmergency ? sel.answer : sel.ignore); await page.waitForTimeout(150);
+    }
     if (!endedByItself) await finish(page);
     const reason = await page.locator("#result-subtitle").innerText();
     R.ok(`BO-L${level}`, /時間終了|全件完了|手動終了/.test(reason), `結果画面到達: ${reason}${endedByItself ? "（自動）" : "（手動）"}`);

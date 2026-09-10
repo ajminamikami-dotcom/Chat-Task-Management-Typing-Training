@@ -34,7 +34,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   await page.click(sel.finish); await page.click(sel.menu);
   await start(page, 1);
   const s0 = Date.now();
-  while (await solveOne(page, data, "ideal", 0)) { /* 最速 */ }
+  while (await solveOne(page, data, "ideal", 0)) { /* 最速（Level 1 は着信なし） */ }
   await page.waitForSelector(sel.result, { timeout: 5000 });
   R.ok("SR-1", true, `Level1 を ${((Date.now() - s0) / 1000).toFixed(1)} 秒で完走、自動終了`);
   const sc = await scoreText(page);

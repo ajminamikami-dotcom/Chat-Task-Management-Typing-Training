@@ -18,6 +18,7 @@ const { open, sel, start, finish, solveOne, handlePhoneIfAny, scoreText, reporte
       if (await handlePhoneIfAny(page, data, "ideal")) continue;
       let did;
       try { did = await solveOne(page, data, "ideal", 0); } catch (e) { R.ok(`H-L${level}`, false, e.message); break; }
+      if (did === "phone") continue;
       if (did) n++; else { if (level === 1) break; await page.waitForTimeout(700); }
     }
     const auto = (await page.locator(sel.result).count()) > 0;
