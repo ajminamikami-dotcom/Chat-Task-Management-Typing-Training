@@ -1,6 +1,6 @@
 // 恒久検査スイート 一括実行
 //   node run-all.js            … 全スイート（約40分）
-//   QUICK=1 node run-all.js    … 長時間スイート（判定マトリクス・模擬プレイ・ゲームQA）を除く（約5分）
+//   QUICK=1 node run-all.js    … 長時間スイート（判定マトリクス・模擬プレイ・ゲームQA）を除く（約6分）
 //   ONLY=e2e03,e2e07 node run-all.js
 "use strict";
 const { spawnSync } = require("child_process");
@@ -12,6 +12,7 @@ const SUITES = [
   ["e2e03_softlock",    "進行不能探索（無作為操作×解決可能性オラクル）",    "fast"],
   ["e2e05_adversarial", "敵対的（連打・二重起動・悪意入力・破損データ）",   "fast"],
   ["e2e06_symmetry",    "対称性スイープ",                                  "fast"],
+  ["e2e10_audit",       "監査で確認した不具合の再発防止（一時停止・着信・入力表示・確認画面・CSV）", "fast"],
   ["e2e02_ideal",       "理想プレイ（最高評価の到達可能性）",              "long"],
   ["e2e04_gameqa",      "ゲームQA手法10種",                                "long"],
   ["e2e01_playthrough", "模擬プレイスルー（時間切れ経路を含む）",          "long"],

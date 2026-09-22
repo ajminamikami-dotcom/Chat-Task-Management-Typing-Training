@@ -3,7 +3,7 @@
 // フェーズ構成・判定タイミング・後片付け・フィードバックが同形であることを検査する。
 // 対応要件: AS 対話フローの均質性 / AW 判定タイミング / AZ 空状態 / BE 完了記録 / BO 終了理由 / BQ ショートカット / BR Enter/Space / BD 表示設定の不可侵
 "use strict";
-const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreText, reporter } = require("./_lib");
+const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreText, reporter, finishNow, dismissPhone, clickNoReply } = require("./_lib");
 
 (async () => {
   const R = reporter("e2e06_symmetry");
@@ -20,7 +20,7 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
         // 目的のチャットを探して開く（届いていなければ待つ）
         let a = null;
         for (let tries = 0; tries < 40 && !a; tries++) {
-          if (await page.locator(sel.phone).count()) await page.click(sel.ignore);
+          if (await page.locator(sel.phone).count()) await dismissPhone(page, false);
           const n = await page.locator(sel.openChats).count();
           for (let i = 0; i < n; i++) {
             await page.locator(sel.openChats).nth(i).click(); await page.waitForTimeout(60);
@@ -40,7 +40,7 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
         // 対象を開き直して優先度
         const n = await page.locator(sel.openChats).count();
         for (let i = 0; i < n; i++) { await page.locator(sel.openChats).nth(i).click(); await page.waitForTimeout(40); if ((await activeChatBody(page)).includes(a.text)) break; }
-        await page.click(sel.prio(a.prio)); await page.waitForTimeout(450);
+        await page.click(sel.prio(a.prio)); await page.waitForTimeout(750);
         p.push("優先度後:" + ((await page.locator(sel.option(0)).count()) ? "選択式" : (await page.locator(sel.input).count()) ? "入力式" : "?")
           + "+選び直し" + (await page.locator(sel.redo).count()) + "+返信せず" + (await page.locator(sel.noReply).count()));
         const c1 = await counters(page);
@@ -48,7 +48,7 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
         if (a.req) {
           if (level === 1) await page.click(sel.option(Number(a.copt)));
           else { await page.locator(sel.input).type(a.reply, { delay: 0 }); await page.waitForTimeout(60); await page.click(sel.submit); }
-        } else await page.click(sel.noReply);
+        } else await clickNoReply(page);
         await page.waitForTimeout(80);
         const c2 = await counters(page);
         p.push("完了操作で完了数:" + (c2.completed - c1.completed));
@@ -67,16 +67,16 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
   const viaMouse = async () => {
     await start(page, 1);
     await page.locator(sel.chatItems).first().click(); await page.waitForTimeout(60);
-    await page.click(sel.prio("high")); await page.waitForTimeout(450);
+    await page.click(sel.prio("high")); await page.waitForTimeout(750);
     await page.click(sel.option(0)); await page.waitForTimeout(60);
     const c = await counters(page); await finish(page); const s = await scoreText(page); await page.click(sel.menu); return { c, s };
   };
   const viaKeyboard = async () => {
     await start(page, 1);
     await page.locator(sel.chatItems).first().focus(); await page.keyboard.press("Enter"); await page.waitForTimeout(60);
-    await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(450);
+    await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(750);
     await page.locator(sel.option(0)).focus(); await page.keyboard.press("Space"); await page.waitForTimeout(60);
-    const c = await counters(page); await page.locator(sel.finish).focus(); await page.keyboard.press("Enter"); await page.waitForSelector(sel.result);
+    const c = await counters(page); await page.locator(sel.finish).focus(); await page.keyboard.press("Enter"); await page.locator(sel.finishConfirm).focus(); await page.keyboard.press("Enter"); await page.waitForSelector(sel.result);
     const s = await scoreText(page); await page.click(sel.menu); return { c, s };
   };
   const m = await viaMouse(), k = await viaKeyboard();
@@ -90,8 +90,8 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
     for (const d of data.L1) {
       const n = await page.locator(sel.chatItems).count();
       for (let i = 0; i < n; i++) { if ((await page.locator(sel.chatItems).nth(i).innerText()).startsWith(d.sender)) { await page.locator(sel.chatItems).nth(i).click(); break; } }
-      await page.click(sel.prio(d.prio)); await page.waitForTimeout(450);
-      if (d.req) await page.click(sel.option(Number(d.copt))); else await page.click(sel.noReply);
+      await page.click(sel.prio(d.prio)); await page.waitForTimeout(750);
+      if (d.req) await page.click(sel.option(Number(d.copt))); else await clickNoReply(page);
       await page.waitForTimeout(40);
     }
     await page.waitForSelector(sel.result); const s = await scoreText(page); await page.click(sel.menu); return s.replace(/平均処理.*/, "");
@@ -111,10 +111,10 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
   });
   const shapes = [];
   for (const level of [1, 2, 3]) {
-    await start(page, level, 300); await page.click(sel.finish); await page.waitForSelector(sel.result);
+    await start(page, level, 300); await finishNow(page); await page.waitForSelector(sel.result);
     shapes.push({ level, how: "手動", ...(await shape()) }); await page.click(sel.menu);
   }
-  await start(page, 1); for (const d of data.L1) { const n = await page.locator(sel.openChats).count(); if (!n) break; await page.locator(sel.openChats).first().click(); await page.click(sel.prio("mid")); await page.waitForTimeout(450); await page.click(sel.noReply); await page.waitForTimeout(30); }
+  await start(page, 1); for (const d of data.L1) { const n = await page.locator(sel.openChats).count(); if (!n) break; await page.locator(sel.openChats).first().click(); await page.click(sel.prio("mid")); await page.waitForTimeout(750); await clickNoReply(page); await page.waitForTimeout(30); }
   await page.waitForSelector(sel.result); shapes.push({ level: 1, how: "全件完了", ...(await shape()) }); await page.click(sel.menu);
   const base = { insight: true, review: true, buttons: true };
   const bad = shapes.filter((s) => !(s.insight && s.review && s.buttons && s.cards === (s.level === 3 ? 5 : 4)));
@@ -122,7 +122,7 @@ const { open, sel, start, finish, findAnswer, activeChatBody, counters, scoreTex
 
   // ---------- AZ: 空状態 ----------
   R.section("AZ 空状態表示の均質性");
-  await start(page, 1); for (const d of data.L1) { const n = await page.locator(sel.openChats).count(); if (!n) break; await page.locator(sel.openChats).first().click(); const a = findAnswer(data, await activeChatBody(page), 1); await page.click(sel.prio(a.prio)); await page.waitForTimeout(450); if (a.req) await page.click(sel.option(Number(a.copt))); else await page.click(sel.noReply); await page.waitForTimeout(30); }
+  await start(page, 1); for (const d of data.L1) { const n = await page.locator(sel.openChats).count(); if (!n) break; await page.locator(sel.openChats).first().click(); const a = findAnswer(data, await activeChatBody(page), 1); await page.click(sel.prio(a.prio)); await page.waitForTimeout(750); if (a.req) await page.click(sel.option(Number(a.copt))); else await clickNoReply(page); await page.waitForTimeout(30); }
   await page.waitForSelector(sel.result);
   R.ok("AZ-1", (await page.locator(sel.review).innerText()).includes("要確認タスクはありません"), "全問正解時の要確認タスクに案内文が出る");
   await page.click(sel.menu); await start(page, 2, 300);

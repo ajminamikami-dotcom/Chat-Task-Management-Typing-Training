@@ -95,7 +95,8 @@ const sel = {
   noReply: "#no-reply-btn",
   redo: "#redo-prio-btn",
   pause: "#pause-btn", resume: "#resume-btn", finish: "#finish-btn",
-  phone: "#phone-modal.show", answer: "#answer-phone-btn", ignore: "#ignore-phone-btn",
+  phone: "#phone-modal.show", answer: "#answer-phone-btn", ignore: "#ignore-phone-btn", phonePause: "#phone-pause-btn", phoneCard: "#phone-card",
+  finishConfirm: "#finish-confirm-btn", finishCancel: "#finish-cancel-btn",
   result: "#result-screen.active", game: "#game-screen.active", start: "#start-screen.active",
   score: "#score-grid", insight: "#insight-grid", review: "#review-table",
   csv: "#download-csv-btn", retry: "#retry-btn", menu: "#menu-btn",
@@ -133,9 +134,28 @@ async function handlePhoneIfAny(page, data, mode = "ideal") {
   let answer = rec ? rec.isEmergency : false;
   if (mode === "wrong") answer = !answer;
   if (mode === "random") answer = Math.random() < 0.5;
-  await page.click(answer ? sel.answer : sel.ignore);
-  await page.waitForTimeout(120);
+  await dismissPhone(page, answer);
   return true;
+}
+
+// 着信に応答/無視する。表示直後 0.5 秒は「入力の続き・ダブルクリックの2回目」として無視される仕様なので、人間と同じく少し待ってから押す。
+async function dismissPhone(page, answer) {
+  await page.waitForTimeout(520);
+  await page.click(answer ? sel.answer : sel.ignore, { timeout: 5000 });
+  await page.waitForTimeout(120);
+}
+
+// 「返信せずに完了」を押す。入力途中の文章があるときは確認のためもう一度押す仕様。
+async function clickNoReply(page) {
+  await page.click(sel.noReply, { timeout: 5000 });
+  await page.waitForTimeout(60);
+  if (await page.locator('#no-reply-btn[data-confirm="1"]').count()) { await page.click(sel.noReply, { timeout: 5000 }); await page.waitForTimeout(60); }
+}
+
+// 「終了」→ 確認画面 →「終了して結果を見る」。
+async function finishNow(page) {
+  await page.click(sel.finish, { timeout: 5000 });
+  await page.click(sel.finishConfirm, { timeout: 5000 });
 }
 
 // 1件のチャットを処理する。mode: ideal / wrong / random
@@ -155,14 +175,15 @@ async function solveOne(page, data, mode = "ideal", typeDelay = 1) {
   if (mode === "wrong") prio = prios.find((p) => p !== a.prio);
   if (mode === "random") prio = prios[Math.floor(Math.random() * 3)];
   if (await phoneUp()) return "phone";
-  if (await page.locator(sel.prio(prio)).count()) { await page.click(sel.prio(prio), { timeout: 5000 }); await page.waitForTimeout(450); }
+  // 優先度ボタンと同じ位置に現れる返信ボタンへの 0.7 秒以内の再クリックは「ゆっくりなダブルクリック」として無視される仕様
+  if (await page.locator(sel.prio(prio)).count()) { await page.click(sel.prio(prio), { timeout: 5000 }); await page.waitForTimeout(750); }
   if (await phoneUp()) return "phone";
   const wantReply = mode === "ideal" ? a.req : mode === "wrong" ? !a.req : Math.random() < 0.5;
   if (await page.locator(sel.option(0)).count()) {           // Level 1
     if (wantReply) {
       const idx = a.copt !== null && a.copt !== "null" && mode === "ideal" ? Number(a.copt) : Math.floor(Math.random() * 3);
       await page.click(sel.option(idx));
-    } else await page.click(sel.noReply);
+    } else await clickNoReply(page);
   } else {                                                    // Level 2/3
     if (wantReply) {
       await page.locator(sel.input).fill("");
@@ -170,7 +191,7 @@ async function solveOne(page, data, mode = "ideal", typeDelay = 1) {
       await page.waitForTimeout(80);
       if (await page.locator(sel.submit).isDisabled()) throw new Error("正解を入力しても送信できない: " + a.reply);
       await page.click(sel.submit);
-    } else await page.click(sel.noReply);
+    } else await clickNoReply(page);
   }
   await page.waitForTimeout(70);
   return true;
@@ -178,9 +199,12 @@ async function solveOne(page, data, mode = "ideal", typeDelay = 1) {
 
 async function finish(page) {
   if (!(await page.locator(sel.result).count())) {
-    if (await page.locator(sel.phone).count()) await page.click(sel.ignore);
-    if (await page.locator("#pause-overlay.show").count()) await page.click(sel.resume);
-    await page.click(sel.finish);
+    if (await page.locator(sel.phone).count()) await dismissPhone(page, false);
+    if (await page.locator("#pause-overlay.show").count()) {
+      if (await page.locator(sel.finishConfirm).isVisible()) { await page.click(sel.finishConfirm); await page.waitForSelector(sel.result); await page.waitForTimeout(150); return; }
+      await page.click(sel.resume);
+    }
+    await finishNow(page);
   }
   await page.waitForSelector(sel.result);
   await page.waitForTimeout(150);
@@ -247,4 +271,4 @@ function reporter(suiteName) {
   return api;
 }
 
-module.exports = { open, sel, start, solveOne, finish, scoreText, counters, handlePhoneIfAny, solvabilityOracle, findAnswer, currentLevel, activeChatBody, reporter, loadApp, APP_SRC, OUT_DIR };
+module.exports = { open, sel, start, solveOne, finish, finishNow, dismissPhone, clickNoReply, scoreText, counters, handlePhoneIfAny, solvabilityOracle, findAnswer, currentLevel, activeChatBody, reporter, loadApp, APP_SRC, OUT_DIR };

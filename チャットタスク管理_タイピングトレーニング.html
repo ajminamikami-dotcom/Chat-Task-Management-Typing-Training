@@ -61,7 +61,8 @@
     outline-offset: 2px;
   }
 
-  button:disabled {
+  button:disabled,
+  button[aria-disabled="true"] {
     cursor: not-allowed;
     opacity: 0.45;
   }
@@ -765,6 +766,21 @@
     padding: 0 22px 22px;
   }
 
+  .modal-actions .span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .modal:focus {
+    outline: none;
+  }
+
+  .pause-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
   .pause-overlay {
     position: fixed;
     inset: 0;
@@ -794,6 +810,11 @@
     margin: 24px auto;
     display: grid;
     gap: 18px;
+  }
+
+  /* 要確認タスクの表（min-width 760px）が列全体を押し広げ、狭い画面で結果画面ごと横にはみ出すのを防ぐ */
+  .result-layout > * {
+    min-width: 0;
   }
 
   .score-grid {
@@ -914,7 +935,8 @@
 
   body.comfortable .workspace {
     grid-template-columns: 360px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);
+    /* 下段の操作パネルは内容の高さにする（固定比率だとノートPCの高さで送信ボタンが画面外に隠れる） */
+    grid-template-rows: minmax(0, 1fr) minmax(0, max-content);
   }
 
   body.comfortable .task-panel {
@@ -1045,15 +1067,19 @@
           </div>
           <div class="rule-row">
             <span class="badge mid">中</span>
-            <div><strong>期限内に対応。</strong> 数日内の提出、通常の業務連絡、リマインド。</div>
+            <div><strong>期限内に対応。</strong> 数日内の提出、通常の業務連絡、会議・予定の変更、リマインド。</div>
           </div>
           <div class="rule-row">
             <span class="badge low">低</span>
-            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有。</div>
+            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有、「急ぎではない」と書かれた軽い依頼。</div>
           </div>
           <div class="rule-row">
             <span class="badge neutral">返信</span>
-            <div><strong>「返信不要」は送らず完了。</strong> お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡と、個人からの声かけには返信します。</div>
+            <div><strong>「返信不要」は送らず完了。</strong> お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge neutral">電話</span>
+            <div><strong>緊急なら応答、急がない相手は無視。</strong> 重要顧客・障害の連絡・社長からの電話は応答し、営業の電話や誘いの電話は無視して作業を続けます（Level 3）。</div>
           </div>
         </div>
       </section>
@@ -1140,7 +1166,7 @@
       <div class="workspace">
         <aside class="inbox" aria-labelledby="inbox-title">
           <div class="inbox-head">
-            <h2 id="inbox-title">受信トレイ</h2>
+            <h2 id="inbox-title" tabindex="-1">受信トレイ</h2>
             <div class="inbox-stats">
               <span id="unread-count">未処理 0</span>
               <span id="pending-count">保留 0</span>
@@ -1199,25 +1225,36 @@
   </section>
 </main>
 
-<div class="modal-backdrop" id="phone-modal" role="dialog" aria-modal="true" aria-labelledby="phone-title">
-  <div class="modal">
+<div class="modal-backdrop" id="phone-modal" role="dialog" aria-modal="true" aria-labelledby="phone-title" aria-describedby="caller-name">
+  <div class="modal" id="phone-card" tabindex="-1">
     <div class="modal-body">
       <h2 id="phone-title">着信中</h2>
       <p id="caller-name" style="font-size:22px; font-weight:800; margin:8px 0 12px;">相手の名前</p>
-      <p style="margin:0; color:var(--muted);">緊急性を判断して対応してください。</p>
+      <p style="margin:0; color:var(--muted);">緊急性を判断して対応してください。落ち着きたいときは Esc か「一時停止」で止められます。</p>
     </div>
     <div class="modal-actions">
       <button class="primary-btn" type="button" id="answer-phone-btn">応答する</button>
       <button class="secondary-btn" type="button" id="ignore-phone-btn">無視する</button>
+      <button class="text-btn span-2" type="button" id="phone-pause-btn">一時停止（Esc）</button>
     </div>
   </div>
 </div>
 
 <div class="pause-overlay" id="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title">
   <div class="pause-card">
-    <h2 id="pause-title" style="margin-top:0;">一時停止中</h2>
-    <p style="color:var(--muted);">タイマー、チャット追加、電話着信を止めています。</p>
-    <button class="primary-btn" type="button" id="resume-btn">再開</button>
+    <div id="pause-normal">
+      <h2 id="pause-title" style="margin-top:0;">一時停止中</h2>
+      <p style="color:var(--muted);">タイマー、チャット追加、電話着信を止めています。停止中の時間は処理時間に含まれません。</p>
+      <button class="primary-btn" type="button" id="resume-btn">再開</button>
+    </div>
+    <div id="finish-confirm" hidden>
+      <h2 id="finish-title" style="margin-top:0;">トレーニングを終了しますか？</h2>
+      <p style="color:var(--muted);">結果画面へ移ります。残り時間と処理中の課題はここで打ち切られます。</p>
+      <div class="pause-actions">
+        <button class="text-btn" type="button" id="finish-cancel-btn">続ける</button>
+        <button class="secondary-btn" type="button" id="finish-confirm-btn">終了して結果を見る</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1238,25 +1275,25 @@
     { sender: "営業の鈴木", text: "出張のお土産を買ってきたよ。休憩室に置いておきます。", prio: "low", options: ["ありがとうございます。後でいただきます。", "すぐ食べに行きます！", "いりません。"], correctOpt: 0, requiresReply: true },
     { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "mid", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
     { sender: "受付", text: "重要顧客のC社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
-    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。（返信不要）", prio: "mid", options: ["承知いたしました。", "その日は出社します。", "停電の時間帯を教えてください。"], correctOpt: null, requiresReply: false }
+    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。金曜の退社時はPCの電源を必ず切ってください。（返信不要）", prio: "mid", options: ["承知いたしました。", "その日は出社します。", "停電の時間帯を教えてください。"], correctOpt: null, requiresReply: false }
   ];
 
   const TYPING_DATA = [
     { sender: "顧客サポート", text: "A社様よりシステムにログインできないと重大なクレームが入っています。", prio: "high", reply: "至急状況を確認し、対応いたします。", requiresReply: true },
     { sender: "経理部", text: "本日締切の振込手続きが1件漏れています。15時までに処理が必要です。", prio: "high", reply: "申し訳ございません。すぐに処理します。", requiresReply: true },
-    { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
+    { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。至急対応してください。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
     { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", reply: "拝読いたします。", requiresReply: false },
     { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。どうなっていますか？", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
     { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
     { sender: "全社通知", text: "コンプライアンス委員からの今月の標語です。（返信不要）", prio: "low", reply: "確認いたしました。", requiresReply: false },
     { sender: "総務部 施設担当", text: "来月のオフィスレイアウト変更に伴う座席希望アンケートを金曜までに提出してください。", prio: "mid", reply: "承知いたしました。期日までに提出します。", requiresReply: true },
-    { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
+    { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。期限までに受講してください。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
     { sender: "IT部門", text: "パスワードの定期変更期限が近づいています。5日以内に変更してください。", prio: "mid", reply: "承知いたしました。変更手続きを行います。", requiresReply: true },
     { sender: "営業事務", text: "今月の売上見込データの入力をお願いします。水曜が締め切りです。", prio: "mid", reply: "承知いたしました。期日までに入力します。", requiresReply: true },
     { sender: "総務部 防災担当", text: "防災訓練のお知らせです。来月15日の14時から実施します。参加可否を今週中にご返信ください。", prio: "mid", reply: "承知いたしました。参加いたします。", requiresReply: true },
     { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", reply: "お知らせありがとうございます。", requiresReply: false },
     { sender: "営業の吉田", text: "取引先からお中元のメロンが届きました。休憩室で切り分けます。", prio: "low", reply: "ありがとうございます。後でいただきます。", requiresReply: true },
-    { sender: "システム通知", text: "メールボックスの容量が80%に達しました。不要なメールを削除してください。", prio: "low", reply: "確認いたしました。", requiresReply: true },
+    { sender: "システム通知", text: "メールボックスの容量が80%に達しました。急ぎではありませんので、手すきの際に不要なメールを削除してください。", prio: "low", reply: "確認いたしました。", requiresReply: true },
     { sender: "労働組合", text: "組合費の使い道に関する意見募集ボックスを設置しました。（返信不要）", prio: "low", reply: "承知いたしました。", requiresReply: false },
     { sender: "食堂", text: "今週のスペシャルメニューはカツカレーです！（返信不要）", prio: "low", reply: "美味しそうですね。", requiresReply: false },
     { sender: "田中部長", text: "明日の会議は1時間遅らせる。資料の修正は不要。（返信不要）", prio: "mid", reply: "承知いたしました。", requiresReply: false },
@@ -1298,11 +1335,19 @@
     pauseBtn: document.getElementById("pause-btn"),
     finishBtn: document.getElementById("finish-btn"),
     pauseOverlay: document.getElementById("pause-overlay"),
+    pauseNormal: document.getElementById("pause-normal"),
     resumeBtn: document.getElementById("resume-btn"),
+    finishConfirm: document.getElementById("finish-confirm"),
+    finishConfirmBtn: document.getElementById("finish-confirm-btn"),
+    finishCancelBtn: document.getElementById("finish-cancel-btn"),
     phoneModal: document.getElementById("phone-modal"),
+    phoneCard: document.getElementById("phone-card"),
     callerName: document.getElementById("caller-name"),
     answerPhone: document.getElementById("answer-phone-btn"),
     ignorePhone: document.getElementById("ignore-phone-btn"),
+    phonePause: document.getElementById("phone-pause-btn"),
+    inboxTitle: document.getElementById("inbox-title"),
+    gameShell: document.querySelector(".game-shell"),
     toast: document.getElementById("toast"),
     resultSubtitle: document.getElementById("result-subtitle"),
     scoreGrid: document.getElementById("score-grid"),
@@ -1335,7 +1380,19 @@
     phoneRecords: [],
     lastPhone: null,
     focusBeforePhone: null,
+    focusBeforePhoneChatId: null,
     panelShownAt: 0,
+    overlayClosedAt: 0,
+    phoneShownAt: 0,
+    lastPrioClick: null,
+    composing: false,
+    phoneDefer: 0,
+    chatDueAt: 0,
+    phoneDueAt: 0,
+    chatLeft: null,
+    phoneLeft: null,
+    finishPrompt: false,
+    endReason: "",
     endsAt: 0,
     pausedAt: 0,
     currentPhone: null,
@@ -1375,42 +1432,62 @@
       renderSettings();
     });
 
-    els.phoneModal.addEventListener("keydown", (event) => {
-      if (event.key !== "Tab") return;
-      // 応答する / 無視する の間だけを行き来させ、背面へフォーカスが抜けないようにする。
-      const focusable = [els.answerPhone, els.ignorePhone];
-      const current = focusable.indexOf(document.activeElement);
-      event.preventDefault();
-      const next = event.shiftKey
-        ? (current <= 0 ? focusable.length - 1 : current - 1)
-        : (current === focusable.length - 1 ? 0 : current + 1);
-      focusable[next].focus();
-    });
-
     els.pauseBtn.addEventListener("click", togglePause);
     els.resumeBtn.addEventListener("click", togglePause);
-    els.finishBtn.addEventListener("click", () => endGame("manual"));
+    els.phonePause.addEventListener("click", togglePause);
+    // 「終了」は誤クリック1回で訓練が打ち切られないよう、一時停止したうえで確認する。
+    els.finishBtn.addEventListener("click", openFinishConfirm);
+    els.finishConfirmBtn.addEventListener("click", () => endGame("manual"));
+    els.finishCancelBtn.addEventListener("click", closeFinishConfirm);
     els.answerPhone.addEventListener("click", () => handlePhone(true));
     els.ignorePhone.addEventListener("click", () => handlePhone(false));
     els.downloadCsv.addEventListener("click", downloadCSV);
     els.retry.addEventListener("click", () => startGame(state.lastLevel));
     els.menu.addEventListener("click", () => showScreen("start-screen"));
 
-    // セッション中に F5 やタブ閉じで進行が消えないよう、ブラウザの確認を出す。
+    // セッション中や結果画面で F5・タブ閉じ・戻るをすると進行や結果が黙って消えるため、ブラウザの確認を出す。
     window.addEventListener("beforeunload", (event) => {
-      if (!document.getElementById("game-screen").classList.contains("active") || state.gameOver) return;
+      if (document.getElementById("start-screen").classList.contains("active")) return;
       event.preventDefault();
       event.returnValue = "";
     });
 
     document.addEventListener("keydown", (event) => {
       if (!document.getElementById("game-screen").classList.contains("active")) return;
+
+      // キーの長押し（自動リピート）でボタンが連打されると、着信の応答や完了が本人の判断なしに確定する。
+      if (event.repeat && (event.key === "Enter" || event.key === " " || event.key === "Escape")) {
+        if (event.target && event.target.tagName === "BUTTON") event.preventDefault();
+        return;
+      }
+
+      // 着信画面・一時停止画面の表示中は、Tab がその画面の中だけを循環するようにする（背面へ抜けない）。
+      if (event.key === "Tab") {
+        let trap = null;
+        if (state.paused) {
+          trap = Array.from(els.pauseOverlay.querySelectorAll("button")).filter((button) => button.offsetParent !== null);
+        } else if (els.phoneModal.classList.contains("show")) {
+          trap = [els.answerPhone, els.ignorePhone, els.phonePause];
+        }
+        if (trap && trap.length) {
+          event.preventDefault();
+          cycleFocus(trap, event.shiftKey);
+          return;
+        }
+      }
+
       if (event.key === "Escape") {
-        // IMEの変換取り消しで Esc を押すため、入力欄では一時停止しない。
+        if (state.finishPrompt) {
+          closeFinishConfirm();
+          return;
+        }
+        // IMEの変換取り消しで Esc を押すため、入力欄では一時停止しない（停止中の再開は常に可能）。
         // 着信中でも一時停止できるようにする（配慮機能はどの場面からも到達できること）。
         const target = event.target;
-        if (!target || target.id !== "typing-input") togglePause();
+        if (state.paused || !target || target.id !== "typing-input") togglePause();
+        return;
       }
+
       if (event.altKey && ["1", "2", "3"].includes(event.key)) {
         if (state.paused || els.phoneModal.classList.contains("show")) return;
         const prio = { "1": "high", "2": "mid", "3": "low" }[event.key];
@@ -1418,6 +1495,68 @@
         if (chat && chat.status === "unread") setPriority(prio);
       }
     });
+  }
+
+  function cycleFocus(items, backwards) {
+    const current = items.indexOf(document.activeElement);
+    let next;
+    if (current < 0) next = backwards ? items.length - 1 : 0;
+    else if (backwards) next = current === 0 ? items.length - 1 : current - 1;
+    else next = current === items.length - 1 ? 0 : current + 1;
+    items[next].focus();
+  }
+
+  // 着信中・一時停止中は背面の画面を不活性にし、クリックも Tab も届かないようにする。
+  function setShellInert() {
+    els.gameShell.inert = state.paused || els.phoneModal.classList.contains("show");
+  }
+
+  function openFinishConfirm() {
+    if (state.gameOver || state.finishPrompt) return;
+    state.finishPrompt = true;
+    if (!state.paused) togglePause();
+    els.pauseNormal.hidden = true;
+    els.finishConfirm.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "finish-title");
+    els.finishCancelBtn.focus();
+  }
+
+  function closeFinishConfirm() {
+    if (!state.finishPrompt) return;
+    state.finishPrompt = false;
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    if (state.paused) togglePause();
+  }
+
+  // 完了や電話応答のあと、フォーカスを次の未完了チャットへ移す（body に落ちると Tab が「終了」に飛ぶ）。
+  function focusNextOpenChat() {
+    const next = els.chatList.querySelector(".chat-item:not(.completed)");
+    if (next) next.focus();
+    else els.inboxTitle.focus();
+  }
+
+  // 再開・着信終了のあとに作業位置へ戻す。入力欄 → 開いているチャット → 先頭の未完了 → 一時停止ボタン。
+  function restoreWorkFocus() {
+    if (document.getElementById("typing-input")) {
+      focusTypingInput(true);
+      return;
+    }
+    const target = els.chatList.querySelector(".chat-item.active") || els.chatList.querySelector(".chat-item:not(.completed)");
+    if (target) target.focus();
+    else els.pauseBtn.focus();
+  }
+
+  function isPointerEvent(event) {
+    return Boolean(event && (event.clientX || event.clientY));
+  }
+
+  // 優先度ボタンを押した直後、同じ場所に現れた返信ボタンへの2回目のクリック（ゆっくりめのダブルクリック）を無視する。
+  function isRepeatOfPriorityClick(event) {
+    const last = state.lastPrioClick;
+    if (!last || !isPointerEvent(event)) return false;
+    return Date.now() - last.at < 700 && Math.abs(event.clientX - last.x) < 24 && Math.abs(event.clientY - last.y) < 24;
   }
 
   function loadSettings() {
@@ -1470,8 +1609,27 @@
     state.gameOver = false;
     state.paused = false;
     state.nextPoolIndex = 0;
+    state.focusBeforePhone = null;
+    state.focusBeforePhoneChatId = null;
+    state.panelShownAt = 0;
+    state.overlayClosedAt = 0;
+    state.phoneShownAt = 0;
+    state.lastPrioClick = null;
+    state.composing = false;
+    state.phoneDefer = 0;
+    state.chatDueAt = 0;
+    state.phoneDueAt = 0;
+    state.chatLeft = null;
+    state.phoneLeft = null;
+    state.finishPrompt = false;
+    state.endReason = "";
     els.phoneModal.classList.remove("show");
     els.pauseOverlay.classList.remove("show");
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    els.pauseBtn.textContent = "一時停止";
+    els.gameShell.inert = false;
 
     if (level === 1) {
       state.pool = [];
@@ -1535,9 +1693,12 @@
 
   function scheduleNextChat(delay) {
     window.clearTimeout(state.chatTimerId);
+    state.chatTimerId = null;
     if (state.gameOver || state.level === 1 || state.nextPoolIndex >= state.pool.length) return;
     const wait = delay || typingChatInterval();
+    state.chatDueAt = Date.now() + wait;
     state.chatTimerId = window.setTimeout(() => {
+      state.chatTimerId = null;
       if (state.gameOver) return;
       if (state.paused) {
         scheduleNextChat(1200);
@@ -1560,14 +1721,24 @@
 
   function scheduleNextPhone(delay) {
     window.clearTimeout(state.phoneTimerId);
+    state.phoneTimerId = null;
     if (state.gameOver || state.level !== 3) return;
     const wait = delay || phoneInterval();
+    state.phoneDueAt = Date.now() + wait;
     state.phoneTimerId = window.setTimeout(() => {
+      state.phoneTimerId = null;
       if (state.gameOver) return;
       if (state.paused) {
         scheduleNextPhone(1200);
         return;
       }
+      // IME で変換中（未確定）の文節があるときに着信すると、未確定の文字が確定されて入力欄に残る。少しだけ待つ。
+      if (state.composing && state.phoneDefer < 1500) {
+        state.phoneDefer += 300;
+        scheduleNextPhone(300);
+        return;
+      }
+      state.phoneDefer = 0;
       showPhone();
     }, wait);
   }
@@ -1618,7 +1789,7 @@
     }).join("");
 
     els.chatList.querySelectorAll("[data-chat-id]").forEach((button) => {
-      button.addEventListener("click", () => selectChat(Number(button.dataset.chatId)));
+      button.addEventListener("click", (event) => selectChat(Number(button.dataset.chatId), event));
     });
 
     // 再描画で受信トレイ内のフォーカスが失われると、キーボード操作の人は
@@ -1629,8 +1800,10 @@
     }
   }
 
-  function selectChat(id) {
-    if (state.gameOver) return;
+  function selectChat(id, event) {
+    if (state.gameOver || state.paused) return;
+    // 停止画面・着信画面を閉じた直後のクリック（ダブルクリックの2回目）で別のチャットに切り替わらないようにする。
+    if (isPointerEvent(event) && Date.now() - state.overlayClosedAt < 400) return;
     const chat = state.chats.find((item) => item.id === id);
     if (!chat) return;
     state.activeId = id;
@@ -1689,34 +1862,44 @@
         </div>
       </section>
       <section class="step">
-        <p class="feedback-line">メッセージ本文の期限、影響範囲、相手を見て判断します。</p>
+        <p class="feedback-line">メッセージ本文の期限、影響範囲、相手を見て判断します。（キーボード: Alt+1 高 / Alt+2 中 / Alt+3 低）</p>
       </section>
     `;
 
     els.taskPanel.querySelectorAll("[data-prio]").forEach((button) => {
-      button.addEventListener("click", () => setPriority(button.dataset.prio));
+      button.addEventListener("click", (event) => setPriority(button.dataset.prio, event));
     });
   }
 
-  function setPriority(prio) {
+  function setPriority(prio, event) {
     if (state.gameOver || state.paused) return;
+    if (isPointerEvent(event) && Date.now() - state.overlayClosedAt < 400) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.selectedPrio = prio;
     chat.status = "unreplied";
-    chat.prioAt = Date.now();
+    // 選び直しても最初に判断した時刻を保つ（CSV の振り分け時間／返信時間が付け替わらない）。
+    if (!chat.prioAt) chat.prioAt = Date.now();
+    // マウスで押した直後だけ、同じ場所に現れる返信ボタンへの2回目のクリックを弾く（キー操作にはガードを掛けない）。
+    const pointer = isPointerEvent(event);
+    state.lastPrioClick = pointer ? { x: event.clientX, y: event.clientY, at: Date.now() } : null;
+    state.panelShownAt = pointer ? Date.now() : 0;
     renderAll();
-    focusTypingInput();
+    if (state.level === 1) {
+      const first = els.taskPanel.querySelector(".choice-btn");
+      if (first && !pointer) first.focus();
+    } else {
+      focusTypingInput();
+    }
   }
 
-  // 優先度の選び直し。入力途中の下書きは保持する。
+  // 優先度の選び直し。入力途中の下書きと最初の判断時刻は保持する。
   function reopenPriority() {
     if (state.gameOver || state.paused) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.status = "unread";
     chat.selectedPrio = null;
-    chat.prioAt = null;
     renderAll();
   }
 
@@ -1738,23 +1921,16 @@
     const progressFill = document.querySelector(".progress-fill");
     if (progressFill) progressFill.style.width = `${progress.percent}%`;
 
+    // disabled にすると Tab 順から外れて隣の「返信せずに完了」に着地するため、aria-disabled で見た目だけ無効にし、押されたら理由を伝える。
     const submitBtn = document.getElementById("submit-reply-btn");
-    if (submitBtn) {
-      if (progress.done) {
-        submitBtn.removeAttribute("disabled");
-      } else {
-        submitBtn.setAttribute("disabled", "true");
-      }
-    }
+    if (submitBtn) submitBtn.setAttribute("aria-disabled", progress.done ? "false" : "true");
 
     const feedback = document.getElementById("typing-feedback");
     if (feedback) feedback.textContent = progress.feedback;
   }
 
   function renderReplyPanel(chat) {
-    // 優先度ボタンをダブルクリックすると2回目のクリックがこのパネルに落ちるため、
-    // 表示直後の短い間は「完了」操作を受け付けない（表示は変えない）。
-    state.panelShownAt = Date.now();
+    state.composing = false;
     if (state.level === 1) {
       const options = chat.options.map((option, index) => `
         <button class="choice-btn" type="button" data-option="${index}">${escapeHtml(option)}</button>
@@ -1773,16 +1949,20 @@
         </section>
       `;
       els.taskPanel.querySelectorAll("[data-option]").forEach((button) => {
-        button.addEventListener("click", () => finishChat({
-          action: "reply",
-          selectedReply: chat.options[Number(button.dataset.option)] || "",
-          optionIndex: Number(button.dataset.option)
-        }));
+        button.addEventListener("click", (event) => {
+          if (isRepeatOfPriorityClick(event)) return;
+          finishChat({
+            action: "reply",
+            selectedReply: chat.options[Number(button.dataset.option)] || "",
+            optionIndex: Number(button.dataset.option),
+            fromKeyboard: !isPointerEvent(event)
+          });
+        });
       });
-      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", () => finishChat({
-        action: "no_reply",
-        selectedReply: ""
-      }));
+      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", (event) => {
+        if (isRepeatOfPriorityClick(event)) return;
+        finishChat({ action: "no_reply", selectedReply: "", fromKeyboard: !isPointerEvent(event) });
+      });
       els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
       return;
     }
@@ -1796,7 +1976,7 @@
           <input class="typing-input${progress.done ? " success" : ""}" id="typing-input" type="text" value="${escapeHtml(chat.draft)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="上の文章を入力してください">
           <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress.percent}%"></div></div>
           <div class="action-row">
-            <button class="primary-btn" type="button" id="submit-reply-btn" ${progress.done ? "" : "disabled"}>入力して返信</button>
+            <button class="primary-btn" type="button" id="submit-reply-btn" aria-disabled="${progress.done ? "false" : "true"}">入力して返信</button>
             <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
           </div>
           <p class="feedback-line" id="typing-feedback">${progress.feedback}</p>
@@ -1808,27 +1988,60 @@
     `;
 
     const input = els.taskPanel.querySelector("#typing-input");
-    input.addEventListener("input", () => {
+    const noReplyBtn = els.taskPanel.querySelector("#no-reply-btn");
+    let noReplyTimer = null;
+    const resetNoReplyConfirm = () => {
+      window.clearTimeout(noReplyTimer);
+      if (noReplyBtn.dataset.confirm) {
+        delete noReplyBtn.dataset.confirm;
+        noReplyBtn.textContent = "返信せずに完了";
+      }
+    };
+
+    // IME の変換中（未確定）は、お手本の正誤表示を更新しない（未確定のひらがなを「誤り」と見せない）。
+    input.addEventListener("compositionstart", () => { state.composing = true; });
+    input.addEventListener("compositionend", () => {
+      state.composing = false;
       chat.draft = input.value;
+      updateTypingProgress(chat);
+    });
+    input.addEventListener("blur", () => { state.composing = false; });
+    input.addEventListener("input", (event) => {
+      chat.draft = input.value;
+      resetNoReplyConfirm();
+      if (event.isComposing || state.composing) return;
       updateTypingProgress(chat);
     });
     input.addEventListener("paste", blockTextTransfer);
     input.addEventListener("drop", blockTextTransfer);
     input.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
-      // IME の変換確定の Enter（isComposing / keyCode 229）は送信に使わない
-      if (event.isComposing || event.keyCode === 229) return;
+      // IME の変換確定の Enter（isComposing / keyCode 229）と長押しのリピートは送信に使わない
+      if (event.isComposing || event.keyCode === 229 || event.repeat) return;
       event.preventDefault();
-      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft });
+      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft, fromKeyboard: true });
     });
-    els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", () => finishChat({
-      action: "reply",
-      selectedReply: chat.draft
-    }));
-    els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", () => finishChat({
-      action: "no_reply",
-      selectedReply: ""
-    }));
+    els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", (event) => {
+      if (isRepeatOfPriorityClick(event)) return;
+      if (!typingProgress(chat).done) {
+        showToast("お手本と一致していません。赤い文字の位置から直してください。");
+        focusTypingInput(true);
+        return;
+      }
+      finishChat({ action: "reply", selectedReply: chat.draft, fromKeyboard: !isPointerEvent(event) });
+    });
+    noReplyBtn.addEventListener("click", (event) => {
+      if (isRepeatOfPriorityClick(event)) return;
+      // 入力途中の文章があるのに「返信せずに完了」が押されたときは、誤クリックや Tab の着地による誤完了を防ぐため、もう一度押してもらう。
+      if (normalize(chat.draft) && noReplyBtn.dataset.confirm !== "1") {
+        noReplyBtn.dataset.confirm = "1";
+        noReplyBtn.textContent = "入力途中です。送らずに完了するならもう一度押す";
+        noReplyTimer = window.setTimeout(resetNoReplyConfirm, 4000);
+        return;
+      }
+      resetNoReplyConfirm();
+      finishChat({ action: "no_reply", selectedReply: "", fromKeyboard: !isPointerEvent(event) });
+    });
     els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
     focusTypingInput(true);
   }
@@ -1853,6 +2066,8 @@
 
   function focusTypingInput(keepCursor) {
     window.requestAnimationFrame(() => {
+      // 直前に着信画面や停止画面が出ていたら、背面の入力欄にフォーカスを戻さない。
+      if (state.paused || els.phoneModal.classList.contains("show")) return;
       const input = document.getElementById("typing-input");
       if (!input) return;
       input.focus();
@@ -1870,7 +2085,8 @@
 
   function finishChat(result) {
     if (state.gameOver || state.paused) return;
-    if (Date.now() - state.panelShownAt < 400) return;
+    // パネル表示直後や、着信・停止画面を閉じた直後のクリックはダブルクリックの2回目なので受け付けない（キー操作は対象外）。
+    if (!result.fromKeyboard && Date.now() - state.panelShownAt < 400) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
 
@@ -1898,23 +2114,34 @@
     } else if (state.level !== 1 && allDone && state.nextPoolIndex >= state.pool.length) {
       // 新着が尽きたあとに手持ちがなくなったら、残り時間を待たせずに終了する。
       endGame("complete");
+    } else {
+      focusNextOpenChat();
     }
   }
 
   function showPhone() {
+    // 表示中の着信を上書きしない（最初の相手が記録されずに差し替わるのを防ぐ）。
+    if (state.gameOver || state.paused || state.currentPhone) return;
     // 候補が6件しかないため、抽選し直さないと同じ相手が連続で着信する。
     const candidates = PHONE_DATA.filter((item) => item !== state.lastPhone);
     const pool = candidates.length ? candidates : PHONE_DATA;
     state.currentPhone = pool[randomBetween(0, pool.length - 1)];
     state.lastPhone = state.currentPhone;
     els.callerName.textContent = state.currentPhone.caller;
-    state.focusBeforePhone = document.activeElement;
+    const before = document.activeElement;
+    state.focusBeforePhone = before;
+    state.focusBeforePhoneChatId = before && before.dataset && before.dataset.chatId ? before.dataset.chatId : null;
     els.phoneModal.classList.add("show");
-    els.answerPhone.focus();
+    state.phoneShownAt = Date.now();
+    setShellInert();
+    // 入力中の Space／Enter が「応答する」に落ちないよう、初期フォーカスはボタンではなく着信画面そのものに置く。
+    els.phoneCard.focus();
   }
 
   function handlePhone(didAnswer) {
     if (!state.currentPhone || state.gameOver || state.paused) return;
+    // 表示直後の操作は入力の続き（IME の Space/Enter）やダブルクリックの2回目なので受け付けない。
+    if (Date.now() - state.phoneShownAt < 500) return;
     const correct = state.currentPhone.isEmergency === didAnswer;
     state.phoneRecords.push({
       caller: state.currentPhone.caller,
@@ -1925,6 +2152,10 @@
     });
     els.phoneModal.classList.remove("show");
     state.currentPhone = null;
+    // 着信画面を閉じた直後のクリック（ダブルクリックの2回目）が背面の完了ボタンや受信トレイに落ちないようにする。
+    state.panelShownAt = Date.now();
+    state.overlayClosedAt = Date.now();
+    setShellInert();
 
     if (didAnswer) {
       state.activeId = null;
@@ -1933,16 +2164,24 @@
       els.chatHeading.textContent = "電話対応完了";
       els.chatBadge.textContent = "復帰";
       els.messageStage.innerHTML = '<div class="empty-state">電話対応が完了しました。受信トレイから作業を再開してください。</div>';
+      focusNextOpenChat();
     } else {
       // 無視した場合は作業が中断されない想定なので、元の位置に戻して作業を続けられるようにする。
+      // 着信中に受信トレイが描き直されて元の要素が消えていたら、同じチャットの項目を引き直す。
       const previous = state.focusBeforePhone;
-      if (previous && document.contains(previous) && previous !== els.answerPhone && previous !== els.ignorePhone) {
+      const again = state.focusBeforePhoneChatId !== null
+        ? els.chatList.querySelector(`[data-chat-id="${state.focusBeforePhoneChatId}"]`) : null;
+      const modalParts = [els.answerPhone, els.ignorePhone, els.phonePause, els.phoneCard];
+      if (previous && document.contains(previous) && !modalParts.includes(previous)) {
         previous.focus();
+      } else if (again) {
+        again.focus();
       } else {
-        focusTypingInput(true);
+        restoreWorkFocus();
       }
     }
     state.focusBeforePhone = null;
+    state.focusBeforePhoneChatId = null;
 
     showToast(correct ? "電話判断を記録しました。" : "電話判断を記録しました。結果画面で確認できます。");
     scheduleNextPhone();
@@ -1955,20 +2194,47 @@
     els.pauseBtn.textContent = state.paused ? "再開" : "一時停止";
     if (state.paused) {
       state.pausedAt = Date.now();
+      // 新着・着信の予約は「残り時間」を保存して止める。
+      // 再開時に固定の短い間隔で張り直すと、一時停止するたびに新着と着信が前倒しで増えてしまう。
+      state.chatLeft = state.chatTimerId ? Math.max(0, state.chatDueAt - Date.now()) : null;
+      state.phoneLeft = state.phoneTimerId ? Math.max(0, state.phoneDueAt - Date.now()) : null;
+      window.clearTimeout(state.chatTimerId);
+      window.clearTimeout(state.phoneTimerId);
+      state.chatTimerId = null;
+      state.phoneTimerId = null;
       // 着信中に一時停止した場合、再開するまで着信画面を伏せておく。
       if (state.currentPhone) els.phoneModal.classList.remove("show");
-      // 背面のボタンに Enter が届かないよう、フォーカスを停止画面へ移す。
+      // 背面のボタンに操作が届かないよう、背面を不活性にして停止画面へフォーカスを移す。
+      setShellInert();
       els.resumeBtn.focus();
     } else {
-      if (state.pausedAt) state.endsAt += Date.now() - state.pausedAt;
+      if (state.pausedAt) {
+        const delta = Date.now() - state.pausedAt;
+        state.endsAt += delta;
+        // 停止中の時間を処理時間（結果画面の平均処理・CSV の各時間）に含めない。
+        state.chats.forEach((chat) => {
+          if (chat.status === "completed") return;
+          if (chat.createdAt) chat.createdAt += delta;
+          if (chat.openedAt) chat.openedAt += delta;
+          if (chat.prioAt) chat.prioAt += delta;
+        });
+      }
       state.pausedAt = 0;
-      scheduleNextChat(1500);
-      if (state.level === 3) scheduleNextPhone(2200);
+      // 停止画面を閉じた直後のクリック（ダブルクリックの2回目）が背面の完了ボタンや受信トレイに落ちないようにする。
+      state.panelShownAt = Date.now();
+      state.overlayClosedAt = Date.now();
+      if (state.chatLeft !== null) scheduleNextChat(Math.max(1500, state.chatLeft));
+      if (state.level === 3 && !state.currentPhone && state.phoneLeft !== null) scheduleNextPhone(Math.max(2200, state.phoneLeft));
+      state.chatLeft = null;
+      state.phoneLeft = null;
       if (state.currentPhone) {
         els.phoneModal.classList.add("show");
-        els.answerPhone.focus();
+        state.phoneShownAt = Date.now();
+        setShellInert();
+        els.phoneCard.focus();
       } else {
-        focusTypingInput(true);
+        setShellInert();
+        restoreWorkFocus();
       }
     }
   }
@@ -1976,17 +2242,25 @@
   function endGame(reason) {
     if (state.gameOver) return;
     state.gameOver = true;
+    state.endReason = reason;
     resetTimers();
     els.phoneModal.classList.remove("show");
     els.pauseOverlay.classList.remove("show");
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    state.finishPrompt = false;
     state.paused = false;
+    els.gameShell.inert = false;
     els.pauseBtn.textContent = "一時停止";
+    hideToast();
     showResults(reason);
   }
 
   function showResults(reason) {
-    const summary = buildSummary();
-    els.resultSubtitle.textContent = `${getLevelSubtitle(state.level)} / ${getEndReason(reason)}`;
+    const summary = buildSummary(reason);
+    const undelivered = summary.undelivered ? `（未着 ${summary.undelivered} 件）` : "";
+    els.resultSubtitle.textContent = `${getLevelSubtitle(state.level)} / ${getEndReason(reason)}${undelivered}`;
     els.scoreGrid.innerHTML = `
       ${scoreCard("完了", `${summary.completed}/${summary.total}`, "件")}
       ${scoreCard("優先度", summary.prioAccuracy, "%")}
@@ -2010,9 +2284,11 @@
     showScreen("result-screen");
   }
 
-  function buildSummary() {
+  function buildSummary(reason) {
     const completed = state.chats.filter((chat) => chat.status === "completed");
     const total = state.chats.length;
+    // 途中で終了した場合、まだ届いていなかったチャットの数（結果と CSV に残す）
+    const undelivered = state.level === 1 ? 0 : Math.max(0, state.pool.length - state.nextPoolIndex);
     const prioAccuracy = percent(completed.filter((chat) => chat.isPrioCorrect).length, completed.length);
     const replyAccuracy = percent(completed.filter((chat) => chat.isReplyCorrect).length, completed.length);
     const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
@@ -2023,26 +2299,38 @@
       if (chat.status !== "completed") return true;
       return !chat.isPrioCorrect || !chat.isReplyCorrect;
     });
+    // 返信の誤りを内訳で見て、助言を実際の誤りに合わせる
+    const repliedToNoReply = completed.some((chat) => !chat.requiresReply && chat.selectedAction === "reply");
+    const skippedRequired = completed.some((chat) => chat.requiresReply && chat.selectedAction === "no_reply");
+    const wrongReplyText = completed.some((chat) => chat.requiresReply && chat.selectedAction === "reply" && !chat.isReplyCorrect);
+    // 完了件数が少なすぎるときは「安定しています」と断定しない
+    const enough = completed.length >= 3;
 
     const strengths = [];
     if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
-    if (prioAccuracy !== null && prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
-    if (replyAccuracy !== null && replyAccuracy >= 80) strengths.push("返信する、返信しないの切り分けが安定しています。");
-    if (state.level === 3 && phoneAccuracy !== null && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
+    if (enough && prioAccuracy !== null && prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
+    if (enough && replyAccuracy !== null && replyAccuracy >= 80 && !(noReplyAccuracy !== null && noReplyAccuracy < 80)) strengths.push("返信する、返信しないの切り分けが安定しています。");
+    if (state.level === 3 && state.phoneRecords.length >= 2 && phoneAccuracy !== null && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
     if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
 
     const nextSteps = [];
+    if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);
     if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
     if (prioAccuracy !== null && prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
-    if (replyAccuracy !== null && replyAccuracy < 80) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。");
-    if (noReplyAccuracy !== null && noReplyAccuracy < 80) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+    if (replyAccuracy !== null && replyAccuracy < 80) {
+      if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
+      if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+      if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
+    } else if (noReplyAccuracy !== null && noReplyAccuracy < 80) {
+      nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+    }
     if (state.level === 3 && phoneAccuracy !== null && phoneAccuracy < 80) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
     if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
-
 
     return {
       total,
       completed: completed.length,
+      undelivered,
       prioAccuracy,
       replyAccuracy,
       averageTotal,
@@ -2122,8 +2410,14 @@
     if (id === "start-screen") {
       resetTimers();
       state.gameOver = true;
+      state.paused = false;
+      state.finishPrompt = false;
       els.phoneModal.classList.remove("show");
       els.pauseOverlay.classList.remove("show");
+      els.finishConfirm.hidden = true;
+      els.pauseNormal.hidden = false;
+      els.gameShell.inert = false;
+      hideToast();
     }
     els.screens.forEach((screen) => screen.classList.toggle("active", screen.id === id));
     renderSettings();
@@ -2149,7 +2443,10 @@
       "確認時間(秒)",
       "振り分け時間(秒)",
       "返信時間(秒)",
-      "総処理時間(秒)"
+      "総処理時間(秒)",
+      "制限時間(分)",
+      "終了理由",
+      "未着件数"
     ];
     const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -2158,8 +2455,10 @@
     // toISOString はUTCなので、日本時間の午前中は前日の日付になってしまう。
     const now = new Date();
     const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    // 同じ日に複数回行っても上書きにならないよう、時刻も付ける。
+    const time = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
     link.href = url;
-    link.download = `task_training_result_L${state.level}_${date}.csv`;
+    link.download = `task_training_result_L${state.level}_${date}_${time}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -2179,9 +2478,12 @@
       chat.selectedAction === "reply" ? "返信" : chat.selectedAction === "no_reply" ? "返信せず完了" : "",
       chat.isReplyCorrect === null ? "" : chat.isReplyCorrect ? "正解" : "不正解",
       chat.openedAt ? secondsBetween(chat.createdAt, chat.openedAt) : "",
-      chat.prioAt ? secondsBetween(chat.openedAt, chat.prioAt) : "",
+      chat.prioAt && chat.selectedPrio ? secondsBetween(chat.openedAt, chat.prioAt) : "",
       chat.completedAt ? secondsBetween(chat.prioAt, chat.completedAt) : "",
-      chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : ""
+      chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : "",
+      state.level === 1 ? "" : String(Math.round(state.durationSec / 60)),
+      getEndReason(state.endReason),
+      state.level === 1 ? "0" : String(Math.max(0, state.pool.length - state.nextPoolIndex))
     ];
   }
 
@@ -2202,27 +2504,38 @@
   function renderTarget(chat) {
     const draft = normalize(chat.draft);
     const target = normalize(chat.reply);
+    const matched = commonPrefixLength(draft, target);
     const chars = Array.from(chat.reply);
-    let normalizedIndex = 0;
-    return chars.map((char) => {
+    let position = 0;
+    // 先頭からの一致分を緑、最初の誤りから入力済みの範囲を赤にする（位置が偶然合った文字を緑にしない）。
+    const body = chars.map((char) => {
       if (/\s/.test(char)) return escapeHtml(char);
-      const targetChar = target[normalizedIndex] || "";
-      const typedChar = draft[normalizedIndex];
-      normalizedIndex += 1;
-      if (typedChar === undefined) return `<span>${escapeHtml(char)}</span>`;
-      if (typedChar === targetChar) return `<span class="typed">${escapeHtml(char)}</span>`;
-      return `<span class="wrong">${escapeHtml(char)}</span>`;
+      const index = position;
+      position += 1;
+      if (index < matched) return `<span class="typed">${escapeHtml(char)}</span>`;
+      if (index < draft.length) return `<span class="wrong">${escapeHtml(char)}</span>`;
+      return `<span>${escapeHtml(char)}</span>`;
     }).join("");
+    // お手本より長く打った分は、消すべき文字として末尾に赤で示す。
+    const extra = draft.length > target.length ? `<span class="wrong">${escapeHtml(draft.slice(target.length))}</span>` : "";
+    return body + extra;
   }
 
   function typingProgress(chat) {
     const draft = normalize(chat.draft);
     const target = normalize(chat.reply);
     const matched = commonPrefixLength(draft, target);
-    const percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
+    const extra = Math.max(0, draft.length - target.length);
     const done = draft === target && target.length > 0;
-    const feedback = done ? "入力が一致しました。送信できます。" : `一致 ${matched}/${target.length} 文字`;
-    return { percent: percentValue, done, feedback };
+    let percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
+    // 一致していないのに 100% と見せない
+    if (!done && percentValue === 100) percentValue = 99;
+    let feedback;
+    if (done) feedback = "入力が一致しました。送信できます。";
+    else if (matched === target.length && extra > 0) feedback = `文字が多すぎます。末尾の ${extra} 文字を消してください（一致 ${matched}/${target.length} 文字）`;
+    else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字。赤い文字の位置から直してください`;
+    else feedback = `一致 ${matched}/${target.length} 文字`;
+    return { percent: percentValue, done, feedback, matched, extra };
   }
 
   function commonPrefixLength(a, b) {
@@ -2232,8 +2545,9 @@
     return index;
   }
 
+  // 空白は無視する。IME の句読点設定が「，．」でも「、。」と同じ文字として扱う（お手本どおり打っても不一致になるのを防ぐ）。
   function normalize(value) {
-    return String(value || "").replace(/\s+/g, "");
+    return String(value || "").replace(/\s+/g, "").replace(/，/g, "、").replace(/．/g, "。");
   }
 
   function escapeHtml(value) {
@@ -2315,6 +2629,11 @@
     els.toast.textContent = message;
     els.toast.classList.add("show");
     toastTimer = window.setTimeout(() => els.toast.classList.remove("show"), 2400);
+  }
+
+  function hideToast() {
+    window.clearTimeout(toastTimer);
+    els.toast.classList.remove("show");
   }
 
   init();

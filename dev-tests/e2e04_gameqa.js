@@ -3,7 +3,7 @@
 // 乱数の統計検定 / 文字列走査 / CPUスロットリング / ソーク（時計ドリフト・短縮版）
 // 対応要件: V 一時停止の完全性 / AK 時計の単調性 / P ペーシング上限 / AD フォーカス捕捉 / C 再入安全性 / AB 文言の完全性 / S 終業後の不変性
 "use strict";
-const { open, sel, start, solveOne, finish, counters, reporter, scoreText } = require("./_lib");
+const { open, sel, start, solveOne, finish, counters, reporter, scoreText, finishNow, dismissPhone, clickNoReply } = require("./_lib");
 
 const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s; };
 
@@ -31,7 +31,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
 
   // ---------- 2. スピードラン ----------
   R.section("2 スピードラン（待ち時間ゼロで全件処理）");
-  await page.click(sel.finish); await page.click(sel.menu);
+  await finishNow(page); await page.click(sel.menu);
   await start(page, 1);
   const s0 = Date.now();
   while (await solveOne(page, data, "ideal", 0)) { /* 最速（Level 1 は着信なし） */ }
@@ -46,7 +46,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   const t3 = Date.now();
   let phones = 0;
   while (Date.now() - t3 < 240000 && (await page.locator(sel.chatItems).count()) < 20) {
-    if (await page.locator(sel.phone).count()) { phones++; await page.click(sel.ignore); }
+    if (await page.locator(sel.phone).count()) { phones++; await dismissPhone(page, false); }
     await page.waitForTimeout(1000);
   }
   const c = await counters(page);
@@ -75,10 +75,10 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   await page.mouse.click(5, 5);                                  // 背景クリック
   await page.waitForTimeout(150);
   R.ok("AD-3", await page.locator(sel.phone).count(), "背景クリックでは着信が消えない（応答/無視の判断を必ず求める）");
-  await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(450);
+  await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(750);
   R.ok("AD-4", await page.locator(sel.phone).count(), "着信中に Alt+数字 を押しても背面が動かない");
-  await page.click(sel.ignore); await page.waitForTimeout(150);
-  await page.click(sel.finish); await page.click(sel.menu);
+  await dismissPhone(page, false);
+  await finishNow(page); await page.click(sel.menu);
 
   // ---------- 5. 境界値 ----------
   R.section("5 境界値（残り時間0付近・一時停止と時間切れの競合）");
@@ -96,38 +96,38 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
     let prev = secs(await page.locator(sel.timer).innerText()), mono = true;
     for (let i = 0; i < 6; i++) { await page.waitForTimeout(500); const now = secs(await page.locator(sel.timer).innerText()); if (now > prev) mono = false; prev = now; }
     R.ok("AK-2", mono, "時計が巻き戻らない");
-    await page.click(sel.finish); await page.click(sel.menu);
+    await finishNow(page); await page.click(sel.menu);
   }
 
   // ---------- 6. シーケンスブレイク ----------
   R.section("6 シーケンスブレイク（想定外の順番）");
   await start(page, 1);
   await page.locator(sel.chatItems).nth(0).click(); await page.waitForTimeout(80);
-  await page.click(sel.prio("high")); await page.waitForTimeout(450);
+  await page.click(sel.prio("high")); await page.waitForTimeout(750);
   await page.locator(sel.chatItems).nth(1).click(); await page.waitForTimeout(80);      // 途中で別のチャットへ
-  await page.click(sel.prio("low")); await page.waitForTimeout(450);
+  await page.click(sel.prio("low")); await page.waitForTimeout(750);
   await page.locator(sel.chatItems).nth(0).click(); await page.waitForTimeout(80);      // 戻る
   R.ok("SB-1", (await page.locator("#chat-status-badge").innerText()).includes("保留 高"), "別チャットを経由しても最初の優先度が保持");
   await page.click(sel.redo); await page.waitForTimeout(80);
-  await page.click(sel.prio("mid")); await page.waitForTimeout(450);
+  await page.click(sel.prio("mid")); await page.waitForTimeout(750);
   await page.click(sel.option(0)); await page.waitForTimeout(100);
   await page.locator(sel.chatItems).nth(0).click(); await page.waitForTimeout(80);
   R.ok("SB-2", (await page.locator("#task-panel-content").innerText()).includes("処理済"), "選び直し→別優先度→完了 の経路が成立");
   // 処理済に対して Alt+数字 / Enter
-  await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(450); await page.keyboard.press("Enter"); await page.waitForTimeout(80);
+  await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(750); await page.keyboard.press("Enter"); await page.waitForTimeout(80);
   R.ok("SB-3", (await page.locator("#task-panel-content").innerText()).includes("処理済"), "処理済に対するショートカットは無効");
   // 結果画面で Esc/Alt を連打しても何も起きない（要件S）
-  await page.click(sel.finish); await page.waitForSelector(sel.result);
+  await finishNow(page); await page.waitForSelector(sel.result);
   const sc1 = await scoreText(page);
-  for (let i = 0; i < 10; i++) { await page.keyboard.press("Escape"); await page.keyboard.press("Alt+Digit2"); await page.waitForTimeout(450); }
+  for (let i = 0; i < 10; i++) { await page.keyboard.press("Escape"); await page.keyboard.press("Alt+Digit2"); await page.waitForTimeout(750); }
   await page.waitForTimeout(200);
   R.ok("S-1", sc1 === await scoreText(page) && (await page.locator(sel.result).count()), "結果画面でのキー連打で何も変化しない");
   // 「同じ条件でもう一度」→ 即「終了」→「メニュー」→ 別レベル
-  await page.click(sel.retry); await page.waitForSelector(sel.game); await page.click(sel.finish); await page.waitForSelector(sel.result);
+  await page.click(sel.retry); await page.waitForSelector(sel.game); await finishNow(page); await page.waitForSelector(sel.result);
   await page.click(sel.menu); await page.waitForSelector(sel.start);
   await start(page, 3, 300);
   R.ok("SB-4", (await page.locator("#session-heading").innerText()) === "Level 3", "再挑戦→終了→メニュー→別レベル の遷移が正常");
-  await page.click(sel.finish); await page.click(sel.menu);
+  await finishNow(page); await page.click(sel.menu);
 
   // ---------- 7. 乱数の統計検定 ----------
   R.section("7 乱数の統計検定（出題順・電話相手の偏り）");
@@ -136,7 +136,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
     await start(page, 2, 300);
     const names = await page.evaluate(() => [...document.querySelectorAll("#chat-list .sender")].map((e) => e.textContent));
     names.forEach((n) => { firstSeen[n] = (firstSeen[n] || 0) + 1; });
-    await page.click(sel.finish); await page.click(sel.menu);
+    await finishNow(page); await page.click(sel.menu);
   }
   const distinct = Object.keys(firstSeen).length;
   R.ok("RNG-1", distinct >= 12, `12回の開始で初期4件に現れた送信者の種類 ${distinct}/20（固定順でない）`);
@@ -148,11 +148,11 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   const scan = async (w) => { const t = await page.locator("body").innerText(); if (BAD.test(t)) hits.push(w + ":" + t.match(BAD)[0]); };
   await scan("開始"); await start(page, 3, 300); await scan("開始直後");
   await page.locator(sel.chatItems).first().click(); await scan("選択");
-  await page.click(sel.prio("high")); await page.waitForTimeout(450); await scan("保留"); await page.click(sel.redo); await scan("選び直し");
-  await page.click(sel.prio("low")); await page.waitForTimeout(450); await page.click(sel.noReply); await scan("完了直後");
+  await page.click(sel.prio("high")); await page.waitForTimeout(750); await scan("保留"); await page.click(sel.redo); await scan("選び直し");
+  await page.click(sel.prio("low")); await page.waitForTimeout(750); await clickNoReply(page); await scan("完了直後");
   await page.locator("#chat-list .chat-item.completed").first().click(); await scan("処理済表示");
   await page.click(sel.pause); await scan("一時停止"); await page.click(sel.resume);
-  await page.click(sel.finish); await page.waitForSelector(sel.result); await scan("結果");
+  await finishNow(page); await page.waitForSelector(sel.result); await scan("結果");
   R.ok("AB-1", hits.length === 0, hits.length ? hits.join(" / ") : "未解決値なし");
 
   // ---------- 9. CPUスロットリング ----------
@@ -167,7 +167,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   const drift = Math.abs((c0 - c1) - (w1 - w0) / 1000);
   R.ok("CPU-1", drift <= 1.5, `4倍スロットリング下の8秒で誤差 ${drift.toFixed(1)} 秒`);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-  await page.click(sel.finish); await page.click(sel.menu);
+  await finishNow(page); await page.click(sel.menu);
 
   // ---------- 10. ソーク（短縮版: 60秒の実時間との突合） ----------
   R.section("10 ソーク（60秒の時計ドリフト）");

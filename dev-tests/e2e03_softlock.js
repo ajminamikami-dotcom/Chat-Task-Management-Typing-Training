@@ -3,7 +3,7 @@
 // 手法: 無作為な操作列（モンキー）を全レベルで実行し、毎ステップ「いま正解に到達できるか」を機械判定する。
 //       ランダムには一時停止・電話・優先度の選び直し・誤操作・連打を混ぜる。
 "use strict";
-const { open, sel, start, finish, solvabilityOracle, counters, reporter, handlePhoneIfAny } = require("./_lib");
+const { open, sel, start, finish, solvabilityOracle, counters, reporter, handlePhoneIfAny, dismissPhone, clickNoReply } = require("./_lib");
 
 const ROUNDS = Number(process.env.ROUNDS || 3);      // 1レベルあたりの試行回数
 const STEPS = Number(process.env.STEPS || 120);       // 1試行あたりの操作数
@@ -22,8 +22,8 @@ async function randomAction(page, rnd) {
   }
   if (await page.locator(sel.phone).count()) {
     const r = rnd();
-    if (r < 0.4) { await page.click(sel.answer); return "電話:応答"; }
-    if (r < 0.8) { await page.click(sel.ignore); return "電話:無視"; }
+    if (r < 0.4) { await dismissPhone(page, true); return "電話:応答"; }
+    if (r < 0.8) { await dismissPhone(page, false); return "電話:無視"; }
     if (r < 0.9) { await page.keyboard.press("Tab"); return "電話:Tab"; }
     await page.keyboard.press("Escape"); return "電話中にEsc(一時停止)";
   }
@@ -32,7 +32,7 @@ async function randomAction(page, rnd) {
   if (items) cands.push(async () => { const i = Math.floor(rnd() * items); await page.locator(sel.chatItems).nth(i).click(); return `チャット${i}を開く`; });
   for (const p of ["high", "mid", "low"]) if (await page.locator(sel.prio(p)).count()) cands.push(async () => { await page.click(sel.prio(p)); return `優先度:${p}`; });
   for (let i = 0; i < 3; i++) if (await page.locator(sel.option(i)).count()) cands.push(async () => { await page.click(sel.option(i)); return `選択肢${i}`; });
-  if (await page.locator(sel.noReply).count()) cands.push(async () => { await page.click(sel.noReply); return "返信せずに完了"; });
+  if (await page.locator(sel.noReply).count()) cands.push(async () => { await clickNoReply(page); return "返信せずに完了"; });
   if (await page.locator(sel.redo).count()) cands.push(async () => { await page.click(sel.redo); return "優先度を選び直す"; });
   if (await page.locator(sel.input).count()) {
     cands.push(async () => { await page.locator(sel.input).type(pick(["あ", "承知", "いたしました。", "ｘ", " ", "😀"]), { delay: 2 }); return "入力"; });

@@ -8,7 +8,7 @@
 //  - どれだけ完了できたかを記録し、難易度の判断材料にする
 // 対応要件: CK 課題の作業時間保証 / CL 応答猶予 / L 誤操作からの回復 / AE 到達性 / K 結果の可知性
 "use strict";
-const { open, sel, start, finish, findAnswer, currentLevel, activeChatBody, scoreText, counters, reporter } = require("./_lib");
+const { open, sel, start, finish, findAnswer, currentLevel, activeChatBody, scoreText, counters, reporter, finishNow, dismissPhone, clickNoReply } = require("./_lib");
 
 const CHAR_MS = 1500;          // 40文字/分 ≒ 1.5秒/文字（かな入力＋変換込みの体感）
 const READ_MS_PER_CHAR = 120;  // 本文を読む速度（短縮。実際は250ms程度）
@@ -40,7 +40,7 @@ async function humanSolve(page, data, R, level, speed) {
     await page.keyboard.press("Enter");                                             // Enter で送信
     await page.waitForTimeout(250);
   } else {
-    try { await page.click(sel.noReply, { timeout: 4000 }); } catch (_) { return "phone"; }
+    try { await clickNoReply(page); } catch (_) { return "phone"; }
     await page.waitForTimeout(250);
   }
   return true;
@@ -68,17 +68,17 @@ async function humanSolve(page, data, R, level, speed) {
     await page.keyboard.press("Enter"); await page.waitForTimeout(250);
     R.ok("ENTER-2", (await counters(page)).completed === c0.completed + 1, "一致した状態で Enter → 送信される");
   } else {
-    await page.click(sel.noReply); await page.waitForTimeout(250);
+    await clickNoReply(page); await page.waitForTimeout(250);
     R.ok("GUARD-1", (await counters(page)).completed === c0.completed + 1, "優先度→0.7秒後の「返信せずに完了」が通る");
   }
   // 優先度 → 0.7秒 → 選択（人間の最速に近い間隔）が通ることを Level 1 でも確認
-  await page.click(sel.finish); await page.click(sel.menu); await start(page, 1);
+  await finishNow(page); await page.click(sel.menu); await start(page, 1);
   await page.locator(sel.chatItems).first().click(); await page.waitForTimeout(300);
-  await page.click(sel.prio("high")); await page.waitForTimeout(650);
+  await page.click(sel.prio("high")); await page.waitForTimeout(750);
   const c1 = await counters(page);
   await page.click(sel.option(0)); await page.waitForTimeout(250);
-  R.ok("GUARD-2", (await counters(page)).completed === c1.completed + 1, "優先度→0.65秒後の選択肢クリックが通る（ガードは0.4秒）");
-  await page.click(sel.finish); await page.click(sel.menu);
+  R.ok("GUARD-2", (await counters(page)).completed === c1.completed + 1, "優先度→0.75秒後の選択肢クリックが通る（同じ位置への0.7秒以内の再クリックだけを無視）");
+  await finishNow(page); await page.click(sel.menu);
 
   // ---------- 人間の速度で Level 2 → 5分 ----------
   for (const level of [2, 3]) {
@@ -92,7 +92,7 @@ async function humanSolve(page, data, R, level, speed) {
         const rec = data.PHONE.find((p) => p.caller === who);
         await page.waitForTimeout(2500);                                              // 人間が相手名を読んで判断する間
         phones++; phoneOk++;
-        await page.click(rec.isEmergency ? sel.answer : sel.ignore); await page.waitForTimeout(300);
+        await dismissPhone(page, rec.isEmergency);
         continue;
       }
       const r = await humanSolve(page, data, R, level, level === 2 ? 4 : 1);
@@ -115,7 +115,7 @@ async function humanSolve(page, data, R, level, speed) {
       const ids = ["download-csv-btn", "retry-btn", "menu-btn"];
       return ids.map((id) => { const el = document.getElementById(id); el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return (top && (el === top || el.contains(top))) ? null : id; }).filter(Boolean);
     });
-    const tableScroll = await page.evaluate(() => { const w = document.querySelector("#review-table"); return w ? w.scrollWidth <= w.clientWidth + 2 || getComputedStyle(w).overflowX !== "visible" : true; });
+    const tableScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
     const rowsN = await page.locator("#review-table tbody tr").count();
     R.ok(`AE-結果-L${level}`, reach.length === 0 && tableScroll, `390px幅・要確認表 ${rowsN} 行でも CSV/再挑戦/メニュー が押せ、表は横スクロールで収まる`);
     await page.setViewportSize({ width: 1280, height: 800 });

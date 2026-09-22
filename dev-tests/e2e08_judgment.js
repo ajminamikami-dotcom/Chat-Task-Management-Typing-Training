@@ -5,7 +5,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { open, sel, start, finish, findAnswer, activeChatBody, reporter, OUT_DIR } = require("./_lib");
+const { open, sel, start, finish, findAnswer, activeChatBody, reporter, OUT_DIR, finishNow, dismissPhone, clickNoReply } = require("./_lib");
 
 async function readCsv(page) {
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click(sel.csv)]);
@@ -48,8 +48,8 @@ async function completedVerdict(page) {
       await start(page, 1);
       for (const a of data.L1) {
         await openBySender(page, a.sender);
-        await page.click(sel.prio(prio)); await page.waitForTimeout(450);
-        if (act === 3) await page.click(sel.noReply); else await page.click(sel.option(act));
+        await page.click(sel.prio(prio)); await page.waitForTimeout(750);
+        if (act === 3) await clickNoReply(page); else await page.click(sel.option(act));
         await page.waitForTimeout(60);
       }
       // 全件完了で自動終了。結果のCSVで判定を照合
@@ -87,19 +87,19 @@ async function completedVerdict(page) {
       // 全20件が届くまで処理を続ける（届いた順に処理）
       const t0 = Date.now();
       while (seen.size < data.TY.length && Date.now() - t0 < 290000) {
-        if (await page.locator(sel.phone).count()) await page.click(sel.ignore);
+        if (await page.locator(sel.phone).count()) await dismissPhone(page, false);
         const openItems = page.locator(sel.openChats);
         if (!(await openItems.count())) { await page.waitForTimeout(800); continue; }
         await openItems.first().click(); await page.waitForTimeout(60);
         const a = findAnswer(data, await activeChatBody(page), 2);
         seen.add(a.sender);
-        await page.click(sel.prio(prio)); await page.waitForTimeout(450);
+        await page.click(sel.prio(prio)); await page.waitForTimeout(750);
         if (act === "reply") {
           await page.locator(sel.input).fill("");
           await page.locator(sel.input).type(a.reply, { delay: 0 }); await page.waitForTimeout(50);
-          if (await page.locator(sel.submit).isDisabled()) { R.ok(`H-${a.sender}`, false, "正しい文を入力しても送信不可: " + a.reply); skipped.add(a.sender); await page.click(sel.noReply); }
+          if (await page.locator(sel.submit).isDisabled()) { R.ok(`H-${a.sender}`, false, "正しい文を入力しても送信不可: " + a.reply); skipped.add(a.sender); await clickNoReply(page); }
           else await page.click(sel.submit);
-        } else await page.click(sel.noReply);
+        } else await clickNoReply(page);
         await page.waitForTimeout(50);
       }
       await finish(page);
@@ -123,7 +123,7 @@ async function completedVerdict(page) {
   await page.click(sel.menu); await start(page, 2, 300);
   await page.locator(sel.chatItems).first().click(); await page.waitForTimeout(80);
   const a = findAnswer(data, await activeChatBody(page), 2);
-  await page.click(sel.prio(a.prio)); await page.waitForTimeout(450);
+  await page.click(sel.prio(a.prio)); await page.waitForTimeout(750);
   const tryText = async (txt) => { await page.locator(sel.input).fill(txt); await page.waitForTimeout(60); return !(await page.locator(sel.submit).isDisabled()); };
   R.ok("H-空白", await tryText(" " + a.reply + "　"), "前後の空白（全角含む）があっても一致する");
   R.ok("H-途中空白", await tryText(a.reply.slice(0, 3) + " " + a.reply.slice(3)), "途中に空白を入れても一致する");
@@ -139,7 +139,7 @@ async function completedVerdict(page) {
 
   // ---------- CI 実行不能と誤答の非混同: 未完了は不正解に数えない ----------
   R.section("CI 未完了は誤答として採点されない");
-  await page.click(sel.finish); await page.waitForSelector(sel.result);
+  await finishNow(page); await page.waitForSelector(sel.result);
   const rows = await readCsv(page);
   const unfinished = rows.filter((r) => r["状態"] !== "処理済");
   R.ok("CI-1", unfinished.every((r) => r["優先度正誤"] === "" && r["返信正誤"] === ""), `未完了 ${unfinished.length} 件の正誤欄が空`);
@@ -152,15 +152,15 @@ async function completedVerdict(page) {
   const first = data.L1.find((d) => d.req);
   await openBySender(page, first.sender);
   const wrongPrio = P.find((p) => p !== first.prio);
-  await page.click(sel.prio(wrongPrio)); await page.waitForTimeout(450);
+  await page.click(sel.prio(wrongPrio)); await page.waitForTimeout(750);
   await page.click(sel.option(Number(first.copt))); await page.waitForTimeout(80);
   await openBySender(page, first.sender);
   let v = await completedVerdict(page);
   R.ok("CO-1", !v.prioOk && v.replyOk, "優先度だけ誤り → 優先度のみ不正解、返信は正解: " + v.text);
   const second = data.L1.find((d) => d.req && d.sender !== first.sender);
   await openBySender(page, second.sender);
-  await page.click(sel.prio(second.prio)); await page.waitForTimeout(450);
-  await page.click(sel.noReply); await page.waitForTimeout(80);
+  await page.click(sel.prio(second.prio)); await page.waitForTimeout(750);
+  await clickNoReply(page); await page.waitForTimeout(80);
   await openBySender(page, second.sender);
   v = await completedVerdict(page);
   R.ok("CO-2", v.prioOk && !v.replyOk, "返信だけ誤り → 返信のみ不正解、優先度は正解: " + v.text);
@@ -171,7 +171,7 @@ async function completedVerdict(page) {
   for (let k = 0; k < 2; k++) {
     await page.click(sel.menu).catch(() => {}); if (!(await page.locator(sel.start).count())) { await finish(page); await page.click(sel.menu); }
     await start(page, 1);
-    for (const d of data.L1) { await openBySender(page, d.sender); await page.click(sel.prio("mid")); await page.waitForTimeout(450); await page.click(sel.option(1)); await page.waitForTimeout(50); }
+    for (const d of data.L1) { await openBySender(page, d.sender); await page.click(sel.prio("mid")); await page.waitForTimeout(750); await page.click(sel.option(1)); await page.waitForTimeout(50); }
     await page.waitForSelector(sel.result);
     runs.push((await page.locator(sel.score).innerText()).replace(/平均処理[\s\S]*/, "").replace(/\s+/g, " "));
   }

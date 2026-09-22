@@ -6,7 +6,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { open, sel, start, finish, solveOne, scoreText, counters, reporter, OUT_DIR } = require("./_lib");
+const { open, sel, start, finish, solveOne, scoreText, counters, reporter, OUT_DIR, dismissPhone } = require("./_lib");
 
 const DURATION = 300;
 
@@ -55,13 +55,13 @@ function recompute(rows) {
         const rec = data.PHONE.find((p) => p.caller === who);
         const answer = Math.random() < 0.6 ? rec.isEmergency : !rec.isEmergency;
         phoneLog.push({ who, correct: answer === rec.isEmergency });
-        await page.click(answer ? sel.answer : sel.ignore); await page.waitForTimeout(150);
+        await dismissPhone(page, answer);
         continue;
       }
       // 途中で一度、一時停止（要件V）と優先度の選び直し（要件L）を挟む
       if (!paused && n === 2) { await page.click(sel.pause); await page.waitForTimeout(2500); await page.click(sel.resume); paused = true; await page.waitForTimeout(100); continue; }
       if (!redone && n === 3 && (await page.locator(sel.openChats).count())) {
-        await page.locator(sel.openChats).first().click(); await page.click(sel.prio("low")); await page.waitForTimeout(450);
+        await page.locator(sel.openChats).first().click(); await page.click(sel.prio("low")); await page.waitForTimeout(750);
         await page.click(sel.redo); await page.waitForTimeout(80); redone = true; continue;
       }
       // Level 2 は時間切れ経路を検証したいので、15件処理したら手を止めて残り時間を待つ
@@ -88,7 +88,7 @@ function recompute(rows) {
       const who = await page.locator("#caller-name").innerText();
       const rec = data.PHONE.find((p) => p.caller === who);
       phoneLog.push({ who, correct: true });
-      await page.click(rec.isEmergency ? sel.answer : sel.ignore); await page.waitForTimeout(150);
+      await dismissPhone(page, rec.isEmergency);
     }
     if (!endedByItself) await finish(page);
     const reason = await page.locator("#result-subtitle").innerText();
@@ -118,7 +118,7 @@ function recompute(rows) {
 
     // ---- 要件S: 終了後の不変性 ----
     await page.waitForTimeout(2000);
-    await page.keyboard.press("Escape"); await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(450);
+    await page.keyboard.press("Escape"); await page.keyboard.press("Alt+Digit1"); await page.waitForTimeout(750);
     R.ok(`S-L${level}`, (await scoreText(page)) === shown, "終了後に時間経過・キー操作でスコアが変わらない");
     R.ok(`AB-L${level}`, !/undefined|NaN|\[object/.test(await page.locator("body").innerText()), "結果画面に未解決値なし");
     summary.push({ level, reason, shown });
