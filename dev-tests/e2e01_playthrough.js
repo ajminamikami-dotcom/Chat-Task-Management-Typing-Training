@@ -6,7 +6,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { open, sel, start, finish, solveOne, scoreText, counters, reporter, OUT_DIR, dismissPhone } = require("./_lib");
+const { open, sel, start, finish, solveOne, scoreText, counters, reporter, OUT_DIR, dismissPhone, resume } = require("./_lib");
 
 const DURATION = 300;
 
@@ -59,7 +59,7 @@ function recompute(rows) {
         continue;
       }
       // 途中で一度、一時停止（要件V）と優先度の選び直し（要件L）を挟む
-      if (!paused && n === 2) { await page.click(sel.pause); await page.waitForTimeout(2500); await page.click(sel.resume); paused = true; await page.waitForTimeout(100); continue; }
+      if (!paused && n === 2) { await page.click(sel.pause); await page.waitForTimeout(2500); await resume(page); paused = true; await page.waitForTimeout(100); continue; }
       if (!redone && n === 3 && (await page.locator(sel.openChats).count())) {
         await page.locator(sel.openChats).first().click(); await page.click(sel.prio("low")); await page.waitForTimeout(750);
         await page.click(sel.redo); await page.waitForTimeout(80); redone = true; continue;

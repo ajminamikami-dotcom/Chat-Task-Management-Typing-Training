@@ -142,7 +142,13 @@ async function handlePhoneIfAny(page, data, mode = "ideal") {
 async function dismissPhone(page, answer) {
   await page.waitForTimeout(520);
   await page.click(answer ? sel.answer : sel.ignore, { timeout: 5000 });
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(420);   // 着信画面を閉じた直後 0.4 秒はマウス操作を受け付けない仕様（ダブルクリックの2回目対策）
+}
+
+// 「再開」を押す。停止画面を閉じた直後 0.4 秒はマウス操作を受け付けない仕様なので、その分待つ。
+async function resume(page) {
+  await page.click(sel.resume, { timeout: 5000 });
+  await page.waitForTimeout(420);
 }
 
 // 「返信せずに完了」を押す。入力途中の文章があるときは確認のためもう一度押す仕様。
@@ -202,7 +208,7 @@ async function finish(page) {
     if (await page.locator(sel.phone).count()) await dismissPhone(page, false);
     if (await page.locator("#pause-overlay.show").count()) {
       if (await page.locator(sel.finishConfirm).isVisible()) { await page.click(sel.finishConfirm); await page.waitForSelector(sel.result); await page.waitForTimeout(150); return; }
-      await page.click(sel.resume);
+      await resume(page);
     }
     await finishNow(page);
   }
@@ -271,4 +277,4 @@ function reporter(suiteName) {
   return api;
 }
 
-module.exports = { open, sel, start, solveOne, finish, finishNow, dismissPhone, clickNoReply, scoreText, counters, handlePhoneIfAny, solvabilityOracle, findAnswer, currentLevel, activeChatBody, reporter, loadApp, APP_SRC, OUT_DIR };
+module.exports = { open, sel, start, solveOne, finish, finishNow, dismissPhone, clickNoReply, resume, scoreText, counters, handlePhoneIfAny, solvabilityOracle, findAnswer, currentLevel, activeChatBody, reporter, loadApp, APP_SRC, OUT_DIR };

@@ -3,7 +3,7 @@
 // 手法: 無作為な操作列（モンキー）を全レベルで実行し、毎ステップ「いま正解に到達できるか」を機械判定する。
 //       ランダムには一時停止・電話・優先度の選び直し・誤操作・連打を混ぜる。
 "use strict";
-const { open, sel, start, finish, solvabilityOracle, counters, reporter, handlePhoneIfAny, dismissPhone, clickNoReply } = require("./_lib");
+const { open, sel, start, finish, solvabilityOracle, counters, reporter, handlePhoneIfAny, dismissPhone, clickNoReply, resume } = require("./_lib");
 
 const ROUNDS = Number(process.env.ROUNDS || 3);      // 1レベルあたりの試行回数
 const STEPS = Number(process.env.STEPS || 120);       // 1試行あたりの操作数
@@ -17,7 +17,7 @@ function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 10139
 async function randomAction(page, rnd) {
   const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
   if (await page.locator("#pause-overlay.show").count()) {
-    if (rnd() < 0.85) { await page.click(sel.resume); return "再開"; }
+    if (rnd() < 0.85) { await resume(page); return "再開"; }
     await page.keyboard.press("Escape"); return "Esc(再開)";
   }
   if (await page.locator(sel.phone).count()) {
