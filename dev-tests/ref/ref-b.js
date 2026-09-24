@@ -577,11 +577,8 @@ function csvRow(chat, session) {
 // ---------------------------------------------------------------------------
 function csvRows(chats, session) {
   const list = Array.isArray(chats) ? chats.slice() : [];
-  // createdAt 昇順、同値なら id 昇順（受信順）
+  // id 昇順（受信順）。createdAt は一時停止の補正で後からずれることがあるため使わない
   list.sort(function (a, b) {
-    if (a.createdAt !== b.createdAt) {
-      return a.createdAt < b.createdAt ? -1 : 1;
-    }
     if (a.id !== b.id) {
       return a.id < b.id ? -1 : 1;
     }

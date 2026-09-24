@@ -1589,9 +1589,9 @@
       ];
     }
 
-    // CSV の全行（受信順: createdAt 昇順、同値は id 昇順）
+    // CSV の全行（受信順 = id 昇順。createdAt は一時停止の補正でずれるため並べ替えには使わない）
     function csvRows(chats, session) {
-      return chats.slice().sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((chat) => csvRow(chat, session));
+      return chats.slice().sort((a, b) => a.id - b.id).map((chat) => csvRow(chat, session));
     }
 
     return {

@@ -159,6 +159,8 @@ function genSession(rng, index) {
       phoneRecords.push({ caller: p.caller, isEmergency: p.isEmergency, didAnswer });
     }
   }
+  // 一時停止の補正で未完了チャットの createdAt が後ろへずれた状態（受信順 = id 順と食い違う）も混ぜる
+  if (!ideal && rng.chance(0.15)) { const shift = rng.int(2000, 120000); for (const c of chats) if (c.status !== "completed") { c.createdAt += shift; if (c.openedAt) c.openedAt += shift; if (c.prioAt) c.prioAt += shift; } }
   chats.reverse();   // 本体の受信トレイと同じ「新着が先頭」の並び
   const endReason = ideal ? "complete" : rng.chance(0.04) ? rng.pick(["", "unknown"]) : rng.pick(REASONS);   // 想定外の終了理由は「手動終了」扱い（仕様 §2）
   // Level 1 は常に 0 として扱われる（仕様 §7-1）。Level 2/3 は負値も混ぜて max(0, …) のクランプを検査する。

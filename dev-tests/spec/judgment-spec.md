@@ -19,7 +19,7 @@
 
 | 項目 | 型 | 意味 |
 |---|---|---|
-| id | number | 一意番号 |
+| id | number | 一意番号（受信のたびに 1 ずつ増える。受信順を表す） |
 | sender | string | 送信者名 |
 | text | string | 本文 |
 | correctPrio | "high" / "mid" / "low" | 正解の優先度 |
@@ -273,7 +273,7 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 
 ### 10-3. csvRows(chats, session) → string[17][]
 
-chats を **createdAt 昇順、同値なら id 昇順** に並べ（受信順）、各要素に csvRow(chat, session) を適用した配列。
+chats を **id 昇順** に並べ（受信順。id は受信のたびに 1 ずつ増える番号で、createdAt は一時停止の補正で後からずれることがあるため並べ替えには使わない）、各要素に csvRow(chat, session) を適用した配列。
 
 ---
 

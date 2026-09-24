@@ -456,9 +456,10 @@ function csvRow(chat, session) {
   return CSV_COLUMNS.map((col) => col.value(chat, session));
 }
 
-// 10-3. 受信順（createdAt 昇順、同値は id 昇順）に並べて csvRow を適用（元配列は変えない）
+// 10-3. id 昇順（受信順）に並べて csvRow を適用（元配列は変えない）。
+// createdAt は一時停止の補正で後からずれることがあるため並べ替えには使わない。
 function csvRows(chats, session) {
-  const sorted = (chats || []).slice().sort((a, b) => (a.createdAt - b.createdAt) || (a.id - b.id));
+  const sorted = (chats || []).slice().sort((a, b) => a.id - b.id);
   return sorted.map((chat) => csvRow(chat, session));
 }
 
