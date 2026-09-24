@@ -147,7 +147,9 @@ async function dismissPhone(page, answer) {
 
 // 「再開」を押す。停止画面を閉じた直後 0.4 秒はマウス操作を受け付けない仕様なので、その分待つ。
 async function resume(page) {
-  await page.click(sel.resume, { timeout: 5000 });
+  // 終了確認画面（「終了」を押した後の停止画面）なら「続ける」で戻る
+  if (await page.locator(sel.finishConfirm).isVisible()) await page.click(sel.finishCancel, { timeout: 5000 });
+  else await page.click(sel.resume, { timeout: 5000 });
   await page.waitForTimeout(420);
 }
 
@@ -238,7 +240,9 @@ async function solvabilityOracle(page) {
   const problems = [];
   if (await page.locator(sel.result).count()) return problems;
   if (await page.locator("#pause-overlay.show").count()) {
-    if (!(await page.locator(sel.resume).isVisible())) problems.push("一時停止中に再開ボタンが見えない");
+    if (await page.locator(sel.finishConfirm).isVisible()) {
+      if (!(await page.locator(sel.finishCancel).isVisible())) problems.push("終了確認画面で「続ける」が見えない");
+    } else if (!(await page.locator(sel.resume).isVisible())) problems.push("一時停止中に再開ボタンが見えない");
     return problems;
   }
   if (await page.locator(sel.phone).count()) {

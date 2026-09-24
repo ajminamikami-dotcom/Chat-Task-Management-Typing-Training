@@ -159,6 +159,7 @@ function genSession(rng, index) {
       phoneRecords.push({ caller: p.caller, isEmergency: p.isEmergency, didAnswer });
     }
   }
+  chats.reverse();   // 本体の受信トレイと同じ「新着が先頭」の並び
   const endReason = ideal ? "complete" : rng.chance(0.04) ? rng.pick(["", "unknown"]) : rng.pick(REASONS);   // 想定外の終了理由は「手動終了」扱い（仕様 §2）
   // Level 1 は常に 0 として扱われる（仕様 §7-1）。Level 2/3 は負値も混ぜて max(0, …) のクランプを検査する。
   const undelivered = ideal ? 0 : level === 1 ? rng.pick([0, 0, 0, 2, 5]) : (rng.chance(0.03) ? rng.pick([-1, -5]) : pool.length - delivered);

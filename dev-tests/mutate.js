@@ -152,9 +152,12 @@ for (const { kind, m } of all) {
     if (s.code === 1) res.detectedBy.push("e2e07");
   }
   if (kind === "UI" || FULL) {
-    const b = run("e2e10_audit.js", [], file, 400000);
-    res.e2e10 = b.code === 0 ? "pass" : b.code === 1 ? "FAIL" : `error(${b.code}:${b.err})`;
+    let b = run("e2e10_audit.js", [], file, 400000);
+    // 異常終了（クラッシュ）は 1 回だけ再実行する。再現すれば変異体が操作の流れを壊した証拠なので「異常終了で検出」として別集計する
+    if (b.code !== 0 && b.code !== 1) b = run("e2e10_audit.js", [], file, 400000);
+    res.e2e10 = b.code === 0 ? "pass" : b.code === 1 ? "FAIL" : `crash(${b.code}:${b.err.slice(0, 80)})`;
     if (b.code === 1) res.detectedBy.push("e2e10");
+    else if (b.code !== 0) { res.detectedBy.push("e2e10(異常終了)"); res.crash = true; }
   }
   if ([res.diff, res.golden, res.e2e07, res.e2e10].some((v) => typeof v === "string" && v.startsWith("error"))) res.error = true;
   results.push(res);
@@ -165,8 +168,10 @@ const applied = results.filter((r) => r.applied);
 const detected = applied.filter((r) => r.detectedBy.length);
 console.log("\n==================== 変異検査 ====================");
 console.log(`変異体 ${applied.length} 件（Logic ${applied.filter((r) => r.kind === "Logic").length} / UI ${applied.filter((r) => r.kind === "UI").length}）: 検出 ${detected.length} / 未検出 ${applied.length - detected.length}`);
+const crashed = applied.filter((r) => r.crash);
+if (crashed.length) console.log(`  うち e2e10 の異常終了で検出: ${crashed.length} 件（${crashed.map((r) => r.id).join(",")}）`);
 for (const key of ["差分", "ゴールデン", "e2e07", "e2e10"]) {
-  const hit = applied.filter((r) => r.detectedBy.includes(key)).length;
+  const hit = applied.filter((r) => r.detectedBy.some((d) => d.startsWith(key))).length;
   const tried = applied.filter((r) => (key === "e2e10" ? r.e2e10 !== undefined : r[key === "差分" ? "diff" : key === "ゴールデン" ? "golden" : "e2e07"] !== undefined)).length;
   console.log(`  ${key}: ${hit}/${tried}`);
 }
