@@ -113,8 +113,9 @@ function genSession(rng, index) {
     };
     const r = rng.next();
     if (r < 0.25) {
-      // 未処理（開いたかどうかは半々）
+      // 未処理（開いたかどうかは半々。開いた後に優先度を選び直して未処理に戻したもの＝prioAt だけ残る、も混ぜる）
       if (rng.chance(0.5)) chat.openedAt = createdAt + rng.int(500, 60000);
+      if (chat.openedAt && rng.chance(0.3)) chat.prioAt = chat.openedAt + rng.int(300, 20000);
     } else if (r < 0.45) {
       // 保留（優先度選択済み、下書きあり／なし）
       chat.status = "unreplied";
@@ -154,14 +155,15 @@ function genSession(rng, index) {
       phoneRecords.push({ caller: p.caller, isEmergency: p.isEmergency, didAnswer, correct: p.isEmergency === didAnswer });
     }
   }
-  const endReason = rng.pick(REASONS);
-  const undelivered = level === 1 ? 0 : pool.length - delivered;
+  const endReason = rng.chance(0.04) ? rng.pick(["", "unknown"]) : rng.pick(REASONS);   // 想定外の終了理由は「手動終了」扱い（仕様 §2）
+  const undelivered = level === 1 ? rng.pick([0, 0, 0, 2, 5]) : pool.length - delivered;    // Level 1 は常に 0 として扱われる（仕様 §7-1）
   return { index, level, durationSec, chats, phoneRecords, endReason, undelivered };
 }
 
 function genTypingCases(rng, session) {
   if (session.level === 1) return [];
   const cases = [];
+  if (rng.chance(0.05)) cases.push({ draft: "", reply: "", kind: "empty-both" });   // 空のお手本では done にならない（仕様 §3-3）
   for (const chat of session.chats.slice(0, 3)) {
     const m = mutateReply(rng, chat.reply);
     cases.push({ draft: m.draft, reply: chat.reply, kind: m.kind });
