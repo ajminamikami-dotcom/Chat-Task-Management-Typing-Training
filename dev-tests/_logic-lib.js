@@ -107,7 +107,8 @@ function genSession(rng, index) {
   const chats = [];
   for (let i = 0; i < delivered; i++) {
     const d = order[i];
-    const createdAt = base + i * rng.int(1000, 40000);
+    // 同時刻に届いた（createdAt が同じ）チャットも混ぜる（CSV の並び順は id で決まる）
+    const createdAt = i > 0 && rng.chance(0.08) ? chats[i - 1].createdAt : base + i * rng.int(1000, 40000);
     const chat = {
       id: i + 1, sender: d.sender, text: d.text, correctPrio: d.prio, options: d.options, correctOpt: d.correctOpt, reply: d.reply,
       requiresReply: d.requiresReply, status: "unread", selectedPrio: null, selectedAction: "", selectedReply: "", draft: "",

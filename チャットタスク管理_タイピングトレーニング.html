@@ -2119,6 +2119,8 @@
   }
 
   function renderPriorityPanel(chat) {
+    // 優先度パネルが（再び）表示されたら、「同じ位置への再クリック」規則の対象は消える
+    gate.spot = null;
     els.taskPanel.innerHTML = `
       <section class="step">
         <h3>STEP 1 優先度</h3>
