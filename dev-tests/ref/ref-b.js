@@ -151,6 +151,15 @@ function judge(chat, result, level) {
 }
 
 // ---------------------------------------------------------------------------
+// §4-2 電話 judgePhone(isEmergency, didAnswer) → { correct }
+// ---------------------------------------------------------------------------
+function judgePhone(isEmergency, didAnswer) {
+  // 緊急の相手に応答した／緊急でない相手を無視した、が正解
+  const correct = isEmergency === didAnswer;
+  return { correct: correct };
+}
+
+// ---------------------------------------------------------------------------
 // §5 数値の補助
 // ---------------------------------------------------------------------------
 function percent(n, d) {
@@ -273,6 +282,8 @@ function summarize(session) {
   let replyCorrectCount = 0;
   let noReplyCount = 0;
   let noReplyCorrectCount = 0;
+  let requiredReplyCount = 0;
+  let requiredReplyCorrectCount = 0;
   const totalSeconds = [];
   let repliedToNoReply = false;
   let skippedRequired = false;
@@ -289,6 +300,11 @@ function summarize(session) {
       noReplyCount++;
       if (c.isReplyCorrect) {
         noReplyCorrectCount++;
+      }
+    } else {
+      requiredReplyCount++;
+      if (c.isReplyCorrect) {
+        requiredReplyCorrectCount++;
       }
     }
     totalSeconds.push(secondsBetween(c.openedAt, c.completedAt));
@@ -309,6 +325,7 @@ function summarize(session) {
   const replyAccuracy = percent(replyCorrectCount, completed);
   const averageTotal = average(totalSeconds);
   const noReplyAccuracy = percent(noReplyCorrectCount, noReplyCount);
+  const requiredReplyAccuracy = percent(requiredReplyCorrectCount, requiredReplyCount);
 
   let phoneCorrectCount = 0;
   for (let i = 0; i < phoneRecords.length; i++) {
@@ -344,7 +361,8 @@ function summarize(session) {
     enough &&
     replyAccuracy !== null &&
     replyAccuracy >= GOOD &&
-    !(noReplyAccuracy !== null && noReplyAccuracy < GOOD)
+    !(noReplyAccuracy !== null && noReplyAccuracy < GOOD) &&
+    !(requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD)
   ) {
     strengths.push('返信する、返信しないの切り分けが安定しています。');
   }
@@ -386,8 +404,14 @@ function summarize(session) {
     if (wrongReplyText) {
       nextSteps.push('相手の依頼に沿った返信文を選びましょう。');
     }
-  } else if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) {
-    nextSteps.push('返信不要タスクは入力せずに完了する練習を増やしましょう。');
+  } else {
+    // replyAccuracy が null か ≥ GOOD のとき、内訳ごとに助言
+    if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) {
+      nextSteps.push('返信不要タスクは入力せずに完了する練習を増やしましょう。');
+    }
+    if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {
+      nextSteps.push('依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。');
+    }
   }
   if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) {
     nextSteps.push('電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。');
@@ -548,6 +572,28 @@ function csvRow(chat, session) {
   ];
 }
 
+// ---------------------------------------------------------------------------
+// §10-3 csvRows(chats, session) → string[17][]
+// ---------------------------------------------------------------------------
+function csvRows(chats, session) {
+  const list = Array.isArray(chats) ? chats.slice() : [];
+  // createdAt 昇順、同値なら id 昇順（受信順）
+  list.sort(function (a, b) {
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt < b.createdAt ? -1 : 1;
+    }
+    if (a.id !== b.id) {
+      return a.id < b.id ? -1 : 1;
+    }
+    return 0;
+  });
+  const rows = [];
+  for (let i = 0; i < list.length; i++) {
+    rows.push(csvRow(list[i], session));
+  }
+  return rows;
+}
+
 module.exports = {
   labels,
   normalize,
@@ -555,6 +601,7 @@ module.exports = {
   typingProgress,
   targetMarks,
   judge,
+  judgePhone,
   percent,
   average,
   formatStat,
@@ -569,4 +616,5 @@ module.exports = {
   replyResultText,
   csvHeader,
   csvRow,
+  csvRows,
 };

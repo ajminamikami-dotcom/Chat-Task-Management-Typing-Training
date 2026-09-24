@@ -18,16 +18,19 @@ R.ok("Y-1", data.L1.filter((d) => d.req).every((d) => d.copt !== "null" && Numbe
 R.ok("Y-2", data.L1.filter((d) => !d.req).every((d) => d.copt === "null"), "返信不要な Level1 問題は正解番号が null");
 R.ok("Y-3", data.L1.every((d) => d.opts.length === 3), "Level1 は全問3択（選択肢数で返信要否が漏れない）");
 R.ok("H-1", data.TY.every((d) => !/[0-9A-Za-z]/.test(d.reply)), "お手本に半角英数字が無い（全角/半角の取り違えが起きない）");
-R.ok("H-2", data.TY.every((d) => !/[　 ]/.test(d.reply.trim())), "お手本の途中に空白が無い（空白の有無で不一致にならない）");
+R.ok("H-2", data.TY.every((d) => !/\s/.test(d.reply)), "お手本に空白が無い（空白の有無で不一致にならない）");
+R.ok("H-3", data.TY.every((d) => !/[\uD800-\uDFFF]/.test(d.reply)) && data.L1.every((d) => d.opts.every((o) => !/[\uD800-\uDFFF\s]/.test(o))), "お手本・選択肢にサロゲートペア（絵文字等）と空白が無い（仕様 §11-5。文字数の数え方の前提）");
 
 R.section("AA 罠の判別可能性（本文の手がかりだけで返信要否が決まるか）");
-const askWords = ["ください", "でしょうか", "ですか", "どうなって", "いかがいたしましょう", "お願いします", "来れそう", "必要です", "漏れています", "クレームが入って", "応答がありません", "ご来社されています", "迫っています", "ご返信", "てくれ"];
-const favorWords = ["お土産", "メロン"];
+// 返信要否の予測は仕様書 §11-2/§11-3 の類型語だけで行う（属性表とは独立に、本文と送信者名から機械的に導く）
+const T0 = require("./ref/answer-table");
 const mismatch = all.filter((d) => {
-  const predicted = d.text.includes("返信不要") ? false : (askWords.some((k) => d.text.includes(k)) || favorWords.some((k) => d.text.includes(k)));
+  const personal = T0.PERSONAL_CUES.some((k) => d.sender.includes(k));
+  const request = T0.REQUEST_CUES.some((k) => d.text.includes(k));
+  const predicted = d.text.includes("返信不要") ? false : (personal || request);
   return predicted !== d.req;
 });
-R.ok("AA-1", mismatch.length === 0, `判定ルールと食い違う問題: ${mismatch.length}件 ${mismatch.map((d) => d.sender).join(",")}`);
+R.ok("AA-1", mismatch.length === 0, `本文・送信者の類型語だけから導いた返信要否と正解表が食い違う問題: ${mismatch.length}件 ${mismatch.map((d) => d.sender).join(",")}`);
 R.ok("AA-2", !all.some((d) => d.text.includes("返信不要") && d.req), "「返信不要」と書いてあるのに返信必要な問題が無い");
 R.ok("AA-3", data.L1.filter((d) => d.prio === "high").every((d) => /クレーム|ダウン|重要顧客|至急|本日/.test(d.text)), "Level1 の「高」は本文に至急の根拠がある");
 
@@ -48,6 +51,23 @@ R.section("原則 問題データの正解が規則表（仕様書 §11）から
   R.ok("P-5", markBad.length === 0, `「返信不要」表記の属性が本文と食い違う問題: ${markBad.length}件 ${markBad.map((d) => d.sender).join(",")}`);
   const phoneBad = data.PHONE.filter((p) => { const a = T.PHONE_ATTRIBUTES.find((x) => x.caller === p.caller); return !a || a.isEmergency !== p.isEmergency; });
   R.ok("P-6", phoneBad.length === 0 && data.PHONE.length === T.PHONE_ATTRIBUTES.length, `電話の緊急性が属性表と食い違う: ${phoneBad.length}件`);
+  // 属性の根拠が本文・送信者にあること（仕様 §11-3）。真の属性は根拠語を引用し、それが実在する。偽の属性には類型語が無い。
+  const cueBad = [];
+  for (const d of rows) {
+    const a = T.ATTRIBUTES.find((x) => x.level === d.level && x.sender === d.sender); if (!a) continue;
+    const cue = a.cue || {};
+    for (const k of ["urgent", "dated"]) if (a[k] && !(cue[k] && d.text.includes(cue[k]))) cueBad.push(`${d.sender}:${k}の根拠語が本文に無い`);
+    const hasReq = T.REQUEST_CUES.some((w) => d.text.includes(w));
+    if (a.request && !(cue.request && T.REQUEST_CUES.includes(cue.request) && d.text.includes(cue.request))) cueBad.push(`${d.sender}:request の類型語が本文に無い`);
+    if (!a.request && hasReq) cueBad.push(`${d.sender}:request=false なのに類型語がある`);
+    const hasPersonal = T.PERSONAL_CUES.some((w) => d.sender.includes(w));
+    if (a.personal !== hasPersonal) cueBad.push(`${d.sender}:personal と送信者名が食い違う`);
+  }
+  R.ok("P-7", cueBad.length === 0, `属性の根拠が本文・送信者に無い: ${cueBad.length}件 ${cueBad.join(" / ")}`);
+  // 判定基準パネルの文言が仕様 §11-4 の語句をすべて含むこと
+  const panel = html.slice(html.indexOf('aria-labelledby="criteria-title"'), html.indexOf('aria-labelledby="level-title"'));
+  const missingPhrases = Object.values(T.PANEL_PHRASES).flat().filter((ph) => !panel.includes(ph));
+  R.ok("P-8", missingPhrases.length === 0, `判定基準パネルに無い語句: ${missingPhrases.length}件 ${missingPhrases.join(",")}`);
 }
 
 R.section("CP 表示名の一意性");

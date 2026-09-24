@@ -17,7 +17,7 @@ const JSON_OUT = !!process.env.JSON;
 
 const app = loadLogic();
 const rng = makeRng(SEED);
-const KEYS = ["judgments", "total", "completed", "undelivered", "prioAccuracy", "replyAccuracy", "averageTotal", "phoneAccuracy", "strengths", "nextSteps", "reviewRows", "scoreCards", "subtitle", "reviewTexts", "completedPanels", "csvHeader", "csvRows", "labels", "timer", "typing"];
+const KEYS = ["judgments", "phoneCorrect", "total", "completed", "undelivered", "prioAccuracy", "replyAccuracy", "averageTotal", "phoneAccuracy", "strengths", "nextSteps", "reviewRows", "scoreCards", "subtitle", "reviewTexts", "completedPanels", "csvHeader", "csvRows", "labels", "timer", "typing"];
 
 const rows = [];
 const current = {};

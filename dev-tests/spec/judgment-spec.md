@@ -9,6 +9,7 @@
 - 数値の丸めは JavaScript の `Math.round`（0.5 は正の無限大方向）と `Number.prototype.toFixed(1)` に従う。
 - 文字数は UTF-16 コード単位で数える（現在のお手本にサロゲートペアや結合文字は無い。含める場合はこの仕様を見直す）。
 - 「真」「偽」は JavaScript の truthy / falsy。完了したチャットの isPrioCorrect / isReplyCorrect は必ず boolean、selectedPrio は必ず設定済み。
+- 前提条件: normalize の value は文字列（null / undefined / "" は ""）、formatTime の sec は 0 以上の整数、session.undelivered は number。これに反する入力に対する出力は未定義で、差分検査・ゴールデンの対象外。
 
 ---
 
@@ -26,7 +27,7 @@
 | correctOpt | number / null | Level 1 の正解選択肢の番号。返信不要の問題は null |
 | reply | string | Level 2/3 のお手本（Level 1 は ""） |
 | requiresReply | boolean | 返信が必要か |
-| status | "unread" / "unreplied" / "completed" | 未処理 / 保留（優先度選択済み） / 処理済 |
+| status | "unread" / "unreplied" / "completed" | 未処理 / 保留（優先度選択済み） / 処理済。**優先度の選び直し**で unreplied → unread に戻る。このとき selectedPrio は null に戻すが、prioAt（最初に優先度を選んだ時刻）と draft は保持する。したがって status=unread かつ prioAt≠null かつ selectedPrio=null の状態は正規に存在する |
 | selectedPrio | "high" / "mid" / "low" / null | 利用者が選んだ優先度 |
 | selectedAction | "reply" / "no_reply" / "" | 完了時の操作。未完了は "" |
 | selectedReply | string | 送信した返信文（Level 1 は選んだ選択肢の文、no_reply は ""） |
@@ -49,7 +50,7 @@
 | level | 1 / 2 / 3 | レベル |
 | durationSec | 300 / 600 / 900 | 制限時間（秒）。Level 1 では使わない |
 | chats | chat[] | 受信トレイの全チャット |
-| phoneRecords | { caller, isEmergency, didAnswer, correct }[] | 電話判断の記録（Level 3 のみ。correct = isEmergency === didAnswer） |
+| phoneRecords | { caller, isEmergency, didAnswer, correct }[] | 電話判断の記録（Level 3 のみ。correct は §4-2 judgePhone で決める） |
 | endReason | "time" / "complete" / "manual" | 終了理由 |
 | undelivered | number | 途中終了時にまだ届いていなかったチャット数。Level 1 では常に 0 |
 
@@ -128,6 +129,10 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 | reply | 1 | chat.requiresReply === true かつ result.optionIndex === chat.correctOpt |
 | reply | 2, 3 | chat.requiresReply === true かつ normalize(result.selectedReply) === normalize(chat.reply) |
 
+### 4-2. 電話 judgePhone(isEmergency, didAnswer) → { correct }
+
+- correct = (isEmergency === didAnswer)。緊急の相手に応答した／緊急でない相手を無視した、が正解。
+
 ---
 
 ## 5. 数値の補助
@@ -173,6 +178,7 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 | replyAccuracy | percent(completedList のうち isReplyCorrect が真の件数, completed) |
 | averageTotal | average(completedList の各 secondsBetween(openedAt, completedAt)) |
 | noReplyAccuracy（内部） | completedList のうち requiresReply が偽のものを分母に、そのうち isReplyCorrect が真の件数を分子にした percent |
+| requiredReplyAccuracy（内部） | completedList のうち requiresReply が真のものを分母に、そのうち isReplyCorrect が真の件数を分子にした percent |
 | phoneAccuracy | percent(phoneRecords のうち correct が真の件数, phoneRecords の件数)（phoneRecords が無ければ空配列として扱う） |
 | reviewRows | chats のうち、未完了のもの、または完了していて isPrioCorrect か isReplyCorrect のどちらかが偽のもの（元の順序のまま） |
 
@@ -189,7 +195,7 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 |---|---|
 | completed > 0 | `{completed}件を最後まで処理しました。` |
 | enough かつ prioAccuracy が null でなく ≥ GOOD | `優先度の判断が安定しています。` |
-| enough かつ replyAccuracy が null でなく ≥ GOOD かつ **not**（noReplyAccuracy が null でなく < GOOD） | `返信する、返信しないの切り分けが安定しています。` |
+| enough かつ replyAccuracy が null でなく ≥ GOOD かつ **not**（noReplyAccuracy が null でなく < GOOD）かつ **not**（requiredReplyAccuracy が null でなく < GOOD） | `返信する、返信しないの切り分けが安定しています。` |
 | level === 3 かつ phoneRecords の件数 ≥ PRAISE_MIN_PHONES かつ phoneAccuracy が null でなく ≥ GOOD | `電話割り込みの緊急度判断が安定しています。` |
 | 上のどれも追加されなかった | `開始して結果を残せています。次回は1件ずつ確実に進めましょう。` |
 
@@ -202,6 +208,7 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 | prioAccuracy が null でなく < GOOD | `高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。` |
 | replyAccuracy が null でなく < GOOD のとき、内訳ごとに（この順）: repliedToNoReply → / skippedRequired → / wrongReplyText → | `本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。` / `依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。` / `相手の依頼に沿った返信文を選びましょう。` |
 | （replyAccuracy が null か ≥ GOOD で）noReplyAccuracy が null でなく < GOOD | `返信不要タスクは入力せずに完了する練習を増やしましょう。` |
+| （replyAccuracy が null か ≥ GOOD で）requiredReplyAccuracy が null でなく < GOOD | `依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。` |
 | level === 3 かつ phoneAccuracy が null でなく < GOOD | `電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。` |
 | 上のどれも追加されなかった | `次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。` |
 
@@ -262,7 +269,11 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 | 終了理由 | endReasonText(session.endReason) |
 | 未着件数 | level 1 なら "0"。それ以外は String(max(0, session.undelivered)) |
 
-（「あれば」は JavaScript の真偽判定。0 や null は「無い」扱い。）
+（「あれば」は JavaScript の真偽判定。0 や null は「無い」扱い。振り分け時間で selectedPrio も見るのは、選び直して未処理に戻したチャットの古い prioAt を振り分け時間として出さないため。）
+
+### 10-3. csvRows(chats, session) → string[17][]
+
+chats を **createdAt 昇順、同値なら id 昇順** に並べ（受信順）、各要素に csvRow(chat, session) を適用した配列。
 
 ---
 
@@ -288,7 +299,32 @@ a と b の先頭から同じ文字が続く長さ（UTF-16 コード単位で�
 | request（依頼・質問・確認事項がある） | true |
 | それ以外（お知らせ・情報共有だけ） | false |
 
-### 11-3. 電話
+### 11-3. 属性の根拠語（属性表の各行は、本文中の根拠を示さなければならない）
+
+| 属性 | 根拠の示し方 | 検査 |
+|---|---|---|
+| urgent / dated | 本文中の語句を `cue` として引用する（例「重要顧客」「今週末までに」「会議」） | cue が本文に含まれること |
+| request | 次の類型語のいずれかが本文にあること: `ください` `お願いします` `でしょうか` `ですか` `ますか` `ご返信` `てくれ` `来れそう` `必要です` `いかがいたしましょうか` | 類型語が本文にあること。request が偽の問題には類型語が無いこと |
+| personal | 送信者が個人（送信者名に「同僚」「営業の」など個人を表す語） | 送信者名に個人の語があること。personal が偽の送信者には無いこと |
+| noReplyMark | 本文に「返信不要」 | 本文と一致すること |
+
+### 11-4. 判定基準パネルの文言（利用者が読む規則。仕様の属性と 1 対 1 に対応させる）
+
+| 属性 | パネルに必ず含める語句 |
+|---|---|
+| urgent | `システム停止` `重大なクレーム` `本日中の締切` `重要顧客の来訪` `至急の依頼` |
+| dated | `数日内の提出` `期限付きの依頼` `通常の業務連絡` `会議・予定の変更` `リマインド` `対応事項のある全社連絡` |
+| それ以外（低） | `雑談` `社内ニュース` `任意参加の案内` `情報共有` `「急ぎではない」と書かれた軽い依頼` |
+| 返信 | `「返信不要」は送らず完了` `個人からの声かけでも` `依頼・質問・確認事項がある連絡には返信` `内容が情報共有でも返信` |
+| 電話 | `営業の電話や誘いの電話は無視` |
+
+### 11-5. データの不変条件
+
+- お手本（reply）と選択肢は BMP 内の文字だけで、空白文字を含まない（サロゲートペア・結合文字を含める場合は §3 の文字数の数え方を見直す）。
+- 返信必要（requiresReply=true）の Level 1 問題は correctOpt を持つ。返信不要の問題は correctOpt が null。
+- 同じ本文に異なる正解を付けない。送信者名はレベル内で一意。
+
+### 11-6. 電話
 
 | 属性 | 正しい操作 |
 |---|---|

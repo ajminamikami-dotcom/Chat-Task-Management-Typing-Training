@@ -8,7 +8,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { loadLogic, makeRng, genSession, genTypingCases, outputsOf } = require("./_logic-lib");
+const { loadLogic, makeRng, genSession, genTypingCases, outputsOf, serialize } = require("./_logic-lib");
 
 const N = Number(process.env.N || 10000);
 const SEED = Number(process.env.SEED || 20260924);
@@ -28,7 +28,7 @@ let compared = 0, sessions = 0, typingCases = 0;
 function diffOutputs(label, a, b, inputSummary) {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
-    const sa = JSON.stringify(a[key]), sb = JSON.stringify(b[key]);
+    const sa = serialize(a[key]), sb = serialize(b[key]);
     compared += 1;
     if (sa !== sb) mismatches.push({ ref: label, key, app: sa, ref_value: sb, input: inputSummary });
   }

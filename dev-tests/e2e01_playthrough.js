@@ -107,7 +107,12 @@ function recompute(rows) {
     R.ok(`I-L${level}`, csv.rows.filter((r) => r["状態"] === "処理済").every((r) => r["総処理時間(秒)"] !== "" && r["選択優先度"] !== "" && r["選択処理"] !== ""), "処理済の行はすべて時刻・選択・結果を持つ（監査可能性）");
     R.ok(`BE-L${level}`, csv.rows.filter((r) => r["状態"] !== "処理済").every((r) => r["優先度正誤"] === "" && r["返信正誤"] === ""), "未完了の行に正誤が付いていない");
     R.ok(`AJ-L${level}`, [rc.prio, rc.reply].every((v) => v === "-" || (Number(v) >= 0 && Number(v) <= 100)), "スコアが定義域内");
-    R.ok(`AI-L${level}`, csv.rows.every((r, i, a) => i === 0 || Number(a[i - 1]["確認時間(秒)"] || 0) >= -1), "CSV が受信順");
+    {
+      // 受信トレイは新着が先頭（新しい順）なので、CSV はその逆順（受信順）になっているはず
+      const inboxOrder = await page.evaluate(() => Array.from(document.querySelectorAll("#chat-list .chat-item .sender")).map((e) => e.textContent));
+      const csvOrder = csv.rows.map((r) => r["送信者"]);
+      R.ok(`AI-L${level}`, JSON.stringify(csvOrder) === JSON.stringify(inboxOrder.slice().reverse()), `CSV が受信順（受信トレイの逆順と一致: ${csvOrder.length} 行）`);
+    }
 
     // ---- Level 3: 電話判断の独立再計算（要件AX/E） ----
     if (level === 3) {

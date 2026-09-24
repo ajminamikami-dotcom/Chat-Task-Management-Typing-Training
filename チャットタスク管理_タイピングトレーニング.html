@@ -1063,11 +1063,11 @@
         <div class="panel-body rule-grid">
           <div class="rule-row">
             <span class="badge high">高</span>
-            <div><strong>至急対応。</strong> システム停止、重大なクレーム、本日中の締切、重要顧客の来訪。</div>
+            <div><strong>至急対応。</strong> システム停止、重大なクレーム、本日中の締切、重要顧客の来訪、至急の依頼。</div>
           </div>
           <div class="rule-row">
             <span class="badge mid">中</span>
-            <div><strong>期限内に対応。</strong> 数日内の提出、通常の業務連絡、会議・予定の変更、リマインド。</div>
+            <div><strong>期限内に対応。</strong> 数日内の提出、期限付きの依頼、通常の業務連絡、会議・予定の変更、リマインド、対応事項のある全社連絡。</div>
           </div>
           <div class="rule-row">
             <span class="badge low">低</span>
@@ -1075,7 +1075,7 @@
           </div>
           <div class="rule-row">
             <span class="badge neutral">返信</span>
-            <div><strong>「返信不要」は送らず完了。</strong> お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。</div>
+            <div><strong>「返信不要」は送らず完了。</strong> 「返信不要」とあれば個人からの声かけでも送りません。お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。</div>
           </div>
           <div class="rule-row">
             <span class="badge neutral">電話</span>
@@ -1279,12 +1279,12 @@
   ];
 
   const TYPING_DATA = [
-    { sender: "顧客サポート", text: "A社様よりシステムにログインできないと重大なクレームが入っています。", prio: "high", reply: "至急状況を確認し、対応いたします。", requiresReply: true },
+    { sender: "顧客サポート", text: "A社様よりシステムにログインできないと重大なクレームが入っています。至急対応をお願いします。", prio: "high", reply: "至急状況を確認し、対応いたします。", requiresReply: true },
     { sender: "経理部", text: "本日締切の振込手続きが1件漏れています。15時までに処理が必要です。", prio: "high", reply: "申し訳ございません。すぐに処理します。", requiresReply: true },
     { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。至急対応してください。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
     { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", reply: "拝読いたします。", requiresReply: false },
     { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。どうなっていますか？", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
-    { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
+    { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。いかがいたしましょうか。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
     { sender: "全社通知", text: "コンプライアンス委員からの今月の標語です。（返信不要）", prio: "low", reply: "確認いたしました。", requiresReply: false },
     { sender: "総務部 施設担当", text: "来月のオフィスレイアウト変更に伴う座席希望アンケートを金曜までに提出してください。", prio: "mid", reply: "承知いたしました。期日までに提出します。", requiresReply: true },
     { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。期限までに受講してください。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
@@ -1433,6 +1433,11 @@
       return { isPrioCorrect, isReplyCorrect };
     }
 
+    // 電話の正誤。緊急の相手に応答した／緊急でない相手を無視した、が正解。
+    function judgePhone(isEmergency, didAnswer) {
+      return { correct: isEmergency === didAnswer };
+    }
+
     // 分母が0のときに 0% を返すと「全問不正解」に見えてしまうため null を返し、表示側で「-」に置き換える。
     function percent(numerator, denominator) {
       if (!denominator) return null;
@@ -1493,6 +1498,8 @@
       const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
       const noReplyItems = completed.filter((chat) => !chat.requiresReply);
       const noReplyAccuracy = percent(noReplyItems.filter((chat) => chat.isReplyCorrect).length, noReplyItems.length);
+      const requiredItems = completed.filter((chat) => chat.requiresReply);
+      const requiredReplyAccuracy = percent(requiredItems.filter((chat) => chat.isReplyCorrect).length, requiredItems.length);
       const phoneAccuracy = percent(phoneRecords.filter((phone) => phone.correct).length, phoneRecords.length);
       const reviewRows = chats.filter((chat) => {
         if (chat.status !== "completed") return true;
@@ -1507,7 +1514,7 @@
       const strengths = [];
       if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
       if (enough && prioAccuracy !== null && prioAccuracy >= GOOD) strengths.push("優先度の判断が安定しています。");
-      if (enough && replyAccuracy !== null && replyAccuracy >= GOOD && !(noReplyAccuracy !== null && noReplyAccuracy < GOOD)) strengths.push("返信する、返信しないの切り分けが安定しています。");
+      if (enough && replyAccuracy !== null && replyAccuracy >= GOOD && !(noReplyAccuracy !== null && noReplyAccuracy < GOOD) && !(requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD)) strengths.push("返信する、返信しないの切り分けが安定しています。");
       if (level === 3 && phoneRecords.length >= PRAISE_MIN_PHONES && phoneAccuracy !== null && phoneAccuracy >= GOOD) strengths.push("電話割り込みの緊急度判断が安定しています。");
       if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
 
@@ -1519,8 +1526,9 @@
         if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
         if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
         if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
-      } else if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) {
-        nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+      } else {
+        if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+        if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
       }
       if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
       if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
@@ -1581,11 +1589,16 @@
       ];
     }
 
+    // CSV の全行（受信順: createdAt 昇順、同値は id 昇順）
+    function csvRows(chats, session) {
+      return chats.slice().sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((chat) => csvRow(chat, session));
+    }
+
     return {
-      labels, normalize, commonPrefixLength, typingProgress, targetMarks, judge,
+      labels, normalize, commonPrefixLength, typingProgress, targetMarks, judge, judgePhone,
       percent, average, formatStat, secondsBetween, formatTime,
       levelSubtitle, endReasonText, resultSubtitle, summarize,
-      completedPanelText, priorityResultText, replyResultText, csvHeader, csvRow
+      completedPanelText, priorityResultText, replyResultText, csvHeader, csvRow, csvRows
     };
   })();
   /* @@LOGIC_END */
@@ -1785,26 +1798,30 @@
   const SAME_SPOT_MS = 700;
   const SAME_SPOT_PX = 24;
   const KEY_SETTLE_MS = 500;
-  const gate = { changedAt: 0, spot: null, keyLockedUntil: 0 };
+  // scope: 切り替わった範囲。"panel" は操作パネルだけ（受信トレイのクリックは妨げない）、"all" は画面全体（着信・停止画面）。
+  const gate = { changedAt: 0, scope: "all", spot: null, keyLockedUntil: 0 };
 
   function resetGate() {
     gate.changedAt = 0;
+    gate.scope = "all";
     gate.spot = null;
     gate.keyLockedUntil = 0;
   }
 
   // 画面が切り替わったことを記録する。切り替えの原因がマウスクリックなら、その位置も覚える。
-  function markScreenChange(event, lockKeys) {
+  function markScreenChange(event, lockKeys, scope) {
     gate.changedAt = Date.now();
+    gate.scope = scope || "all";
     gate.spot = isPointerEvent(event) ? { x: event.clientX, y: event.clientY, at: gate.changedAt } : null;
     if (lockKeys) gate.keyLockedUntil = gate.changedAt + KEY_SETTLE_MS;
   }
 
   // この操作を受け付けてよいか。event が無い／キーボード由来なら、キーの締め出し中でない限り受け付ける。
-  function accepts(event) {
+  // area: 操作の場所。"inbox"（受信トレイ）は、操作パネルだけが切り替わった直後なら妨げない。
+  function accepts(event, area) {
     const now = Date.now();
     if (!isPointerEvent(event)) return now >= gate.keyLockedUntil;
-    if (now - gate.changedAt < POINTER_SETTLE_MS) return false;
+    if (now - gate.changedAt < POINTER_SETTLE_MS && !(area === "inbox" && gate.scope === "panel")) return false;
     const spot = gate.spot;
     if (spot && now - spot.at < SAME_SPOT_MS && Math.abs(event.clientX - spot.x) < SAME_SPOT_PX && Math.abs(event.clientY - spot.y) < SAME_SPOT_PX) return false;
     return true;
@@ -2053,7 +2070,7 @@
 
   function selectChat(id, event) {
     if (state.gameOver || state.paused) return;
-    if (!accepts(event)) return;
+    if (!accepts(event, "inbox")) return;
     const chat = state.chats.find((item) => item.id === id);
     if (!chat) return;
     state.activeId = id;
@@ -2132,7 +2149,7 @@
     if (!chat.prioAt) chat.prioAt = Date.now();
     // 優先度パネルが返信パネルに差し替わる（同じ場所に別のボタンが現れる）。
     const pointer = isPointerEvent(event);
-    if (pointer) markScreenChange(event);
+    if (pointer) markScreenChange(event, false, "panel");
     renderAll();
     if (state.level === 1) {
       const first = els.taskPanel.querySelector(".choice-btn");
@@ -2368,7 +2385,7 @@
   function handlePhone(didAnswer, event) {
     if (!state.currentPhone || state.gameOver || state.paused) return;
     if (!accepts(event)) return;
-    const correct = state.currentPhone.isEmergency === didAnswer;
+    const { correct } = Logic.judgePhone(state.currentPhone.isEmergency, didAnswer);
     state.phoneRecords.push({
       caller: state.currentPhone.caller,
       isEmergency: state.currentPhone.isEmergency,
@@ -2591,7 +2608,7 @@
 
   function downloadCSV() {
     const session = { level: state.level, durationSec: state.durationSec, endReason: state.endReason, undelivered: undeliveredCount() };
-    const rows = [...state.chats].sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((chat) => Logic.csvRow(chat, session));
+    const rows = Logic.csvRows(state.chats, session);
     if (rows.length === 0) {
       showToast("出力するデータがありません。");
       return;

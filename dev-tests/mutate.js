@@ -69,8 +69,24 @@ const LOGIC_MUTANTS = [
   ["L50", "平均処理を振り分け時刻から測る", "const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));", "const averageTotal = average(completed.map((chat) => secondsBetween(chat.prioAt, chat.completedAt)));"],
   ["L51", "百分率の上限を外す（等価: matched ≤ 長さ）", "let percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;", "let percentValue = target.length ? Math.round((matched / target.length) * 100) : 0;"],
   ["L52", "誤り位置の案内を消す", "else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字。赤い文字の位置から直してください`;", "else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字`;"],
-  ["L53", "空白判定を半角スペースだけに（等価: お手本に空白なし）", 'if (/\\s/.test(char)) return { char, state: "space" };', 'if (char === " ") return { char, state: "space" };'],
+  ["L53", "空白判定を半角スペースだけに", 'if (/\\s/.test(char)) return { char, state: "space" };', 'if (char === " ") return { char, state: "space" };'],
   ["L54", "CSV のレベル表記からスペースを削除", "`Level ${level}`,", "`Level${level}`,"],
+  ["L56", "要確認表から未完了行を外す", 'if (chat.status !== "completed") return true;', 'if (chat.status !== "completed") return false;'],
+  ["L57", "強みの既定行を削除", 'if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");', ""],
+  ["L58", "優先度の助言行を削除", 'if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");', ""],
+  ["L59", "電話の助言行を削除", 'if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");', ""],
+  ["L60", "電話の称賛行を削除", 'if (level === 3 && phoneRecords.length >= PRAISE_MIN_PHONES && phoneAccuracy !== null && phoneAccuracy >= GOOD) strengths.push("電話割り込みの緊急度判断が安定しています。");', ""],
+  ["L61", "既定の助言行を削除", 'if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");', ""],
+  ["L62", "返信不要の助言行を削除", 'if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");', ""],
+  ["L63", "返信必要の助言行を削除", 'if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");', ""],
+  ["L64", "集計の未着クランプを外す", "const undelivered = level === 1 ? 0 : Math.max(0, session.undelivered || 0);", "const undelivered = level === 1 ? 0 : (session.undelivered || 0);"],
+  ["L65", "CSV の未着クランプを外す", 'level === 1 ? "0" : String(Math.max(0, session.undelivered || 0))', 'level === 1 ? "0" : String(session.undelivered || 0)'],
+  ["L66", "電話判断の正誤を反転", "return { correct: isEmergency === didAnswer };", "return { correct: isEmergency !== didAnswer };"],
+  ["L67", "CSV の受信順並べ替えを外す", "return chats.slice().sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((chat) => csvRow(chat, session));", "return chats.slice().map((chat) => csvRow(chat, session));"],
+  ["L68", "CSV の同時刻の id 順を外す", "sort((a, b) => a.createdAt - b.createdAt || a.id - b.id)", "sort((a, b) => a.createdAt - b.createdAt)"],
+  ["L69", "訂正文の返信不要の行を削除", 'else if (!chat.requiresReply) replyText = "返信せずに完了するのが正解です。";', ""],
+  ["L70", "要確認表の未完了の優先度表示を変える", "if (chat.status !== \"completed\") return `正解: ${labels[chat.correctPrio]}`;", "if (chat.status !== \"completed\") return `${labels[chat.correctPrio]}`;"],
+  ["L71", "切り分けの称賛で返信必要の内訳を見ない", "&& !(requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD)) strengths.push", ") strengths.push"],
   ["L55", "要確認表を逆順にする", "const reviewRows = chats.filter((chat) => {\n        if (chat.status !== \"completed\") return true;\n        return !chat.isPrioCorrect || !chat.isReplyCorrect;\n      });", "const reviewRows = chats.filter((chat) => {\n        if (chat.status !== \"completed\") return true;\n        return !chat.isPrioCorrect || !chat.isReplyCorrect;\n      }).reverse();"],
 ];
 
@@ -92,6 +108,16 @@ const UI_MUTANTS = [
   ["U15", "変換中の着信を先送りしない", "if (state.composing && state.phoneDefer < 1500) {", "if (false) {"],
   ["U16", "結果画面の横はみ出し対策を外す", ".result-layout > * {\n    min-width: 0;\n  }", ".result-layout > * {\n    min-width: auto;\n  }"],
   ["U17", "ゆったり表示の下段を固定比率に戻す", "grid-template-rows: minmax(0, 1fr) minmax(0, max-content);", "grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);"],
+  ["U18", "停止時間を残り時間に戻さない", "        state.endsAt += delta;\n", ""],
+  ["U19", "停止中も時計を進める", "  function gameTick() {\n    if (state.gameOver || state.paused) return;", "  function gameTick() {\n    if (state.gameOver) return;"],
+  ["U20", "キー操作もマウス扱いにする（原則 5 違反）", "return Boolean(event && (event.clientX || event.clientY));", "return Boolean(event);"],
+  ["U21", "着信中・停止中の Alt+数字を背面に通す", 'if (state.paused || els.phoneModal.classList.contains("show")) return;\n        const prio', "const prio"],
+  ["U22", "IME 確定の Enter で送信する", "if (event.isComposing || event.keyCode === 229 || event.repeat) return;", "if (event.repeat) return;"],
+  ["U23", "入力欄の Esc でも一時停止する", 'if (state.paused || !target || target.id !== "typing-input") togglePause();', "togglePause();"],
+  ["U24", "開き直しで確認時刻を付け替える", "if (!chat.openedAt) chat.openedAt = Date.now();", "chat.openedAt = Date.now();"],
+  ["U25", "未着が残っていても手持ちゼロで終了", "} else if (state.level !== 1 && allDone && state.nextPoolIndex >= state.pool.length) {", "} else if (state.level !== 1 && allDone) {"],
+  ["U26", "Level 1 で Alt+数字のあと選択肢へフォーカスを移さない", "if (first && !pointer) first.focus();", "if (false) first.focus();"],
+  ["U27", "優先度クリック直後に受信トレイのクリックも捨てる（scope 無視）", '&& !(area === "inbox" && gate.scope === "panel")) return false;', ") return false;"],
 ];
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctt-mut-"));
@@ -114,21 +140,23 @@ for (const { kind, m } of all) {
   fs.writeFileSync(file, mutated);
   const res = { id, kind, desc, applied: true, detectedBy: [] };
   if (kind === "Logic" || FULL) {
+    // 終了コード 1 だけを「検出」とみなす。2 や null（ハーネス自体のエラー・タイムアウト）は検出ではなく error として記録する。
     const d = run("diff-check.js", [], file, 120000);
-    res.diff = d.code === 0 ? "pass" : d.code === 1 ? "FAIL" : `error(${d.err})`;
-    if (d.code !== 0) res.detectedBy.push("差分");
+    res.diff = d.code === 0 ? "pass" : d.code === 1 ? "FAIL" : `error(${d.code}:${d.err})`;
+    if (d.code === 1) res.detectedBy.push("差分");
     const g = run("golden.js", [], file, 120000);
-    res.golden = g.code === 0 ? "pass" : g.code === 1 ? "FAIL" : `error(${g.err})`;
-    if (g.code !== 0) res.detectedBy.push("ゴールデン");
+    res.golden = g.code === 0 ? "pass" : g.code === 1 ? "FAIL" : `error(${g.code}:${g.err})`;
+    if (g.code === 1) res.detectedBy.push("ゴールデン");
     const s = run("e2e07_data.js", [], file, 60000);
-    res.e2e07 = s.code === 0 ? "pass" : "FAIL";
-    if (s.code !== 0) res.detectedBy.push("e2e07");
+    res.e2e07 = s.code === 0 ? "pass" : s.code === 1 ? "FAIL" : `error(${s.code}:${s.err})`;
+    if (s.code === 1) res.detectedBy.push("e2e07");
   }
   if (kind === "UI" || FULL) {
     const b = run("e2e10_audit.js", [], file, 400000);
-    res.e2e10 = b.code === 0 ? "pass" : "FAIL";
-    if (b.code !== 0) res.detectedBy.push("e2e10");
+    res.e2e10 = b.code === 0 ? "pass" : b.code === 1 ? "FAIL" : `error(${b.code}:${b.err})`;
+    if (b.code === 1) res.detectedBy.push("e2e10");
   }
+  if ([res.diff, res.golden, res.e2e07, res.e2e10].some((v) => typeof v === "string" && v.startsWith("error"))) res.error = true;
   results.push(res);
   console.log(`${id} ${res.detectedBy.length ? "検出 " + res.detectedBy.join("+") : "未検出"}  ${desc}`);
 }
@@ -142,6 +170,8 @@ for (const key of ["差分", "ゴールデン", "e2e07", "e2e10"]) {
   const tried = applied.filter((r) => (key === "e2e10" ? r.e2e10 !== undefined : r[key === "差分" ? "diff" : key === "ゴールデン" ? "golden" : "e2e07"] !== undefined)).length;
   console.log(`  ${key}: ${hit}/${tried}`);
 }
+const errored = applied.filter((r) => r.error);
+if (errored.length) { console.log("ハーネスのエラー（検出とは数えない）:"); for (const r of errored) console.log(`  ${r.id} ${r.desc}: ${[r.diff, r.golden, r.e2e07, r.e2e10].filter((v) => typeof v === "string" && v.startsWith("error")).join(" ")}`); }
 const missed = applied.filter((r) => !r.detectedBy.length);
 if (missed.length) { console.log("未検出:"); for (const r of missed) console.log(`  ${r.id} ${r.desc}`); }
 const skipped = results.filter((r) => !r.applied);

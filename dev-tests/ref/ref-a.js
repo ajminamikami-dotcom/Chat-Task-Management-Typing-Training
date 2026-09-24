@@ -87,7 +87,8 @@ const STRENGTH_RULES = Object.freeze([
   { when: (c) => c.enough && isBelowOrAbove(c.prioAccuracy, '>=', CONST.GOOD),
     text: '優先度の判断が安定しています。' },
   { when: (c) => c.enough && isBelowOrAbove(c.replyAccuracy, '>=', CONST.GOOD)
-                 && !isBelowOrAbove(c.noReplyAccuracy, '<', CONST.GOOD),
+                 && !isBelowOrAbove(c.noReplyAccuracy, '<', CONST.GOOD)
+                 && !isBelowOrAbove(c.requiredReplyAccuracy, '<', CONST.GOOD),
     text: '返信する、返信しないの切り分けが安定しています。' },
   { when: (c) => c.level === 3 && c.phoneCount >= CONST.PRAISE_MIN_PHONES
                  && isBelowOrAbove(c.phoneAccuracy, '>=', CONST.GOOD),
@@ -116,6 +117,9 @@ const NEXT_STEP_RULES = Object.freeze([
   { when: (c) => !isBelowOrAbove(c.replyAccuracy, '<', CONST.GOOD)
                  && isBelowOrAbove(c.noReplyAccuracy, '<', CONST.GOOD),
     text: '返信不要タスクは入力せずに完了する練習を増やしましょう。' },
+  { when: (c) => !isBelowOrAbove(c.replyAccuracy, '<', CONST.GOOD)
+                 && isBelowOrAbove(c.requiredReplyAccuracy, '<', CONST.GOOD),
+    text: '依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。' },
   { when: (c) => c.level === 3 && isBelowOrAbove(c.phoneAccuracy, '<', CONST.GOOD),
     text: '電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。' },
 ]);
@@ -296,6 +300,11 @@ function judge(chat, result, level) {
   return { isPrioCorrect, isReplyCorrect };
 }
 
+// 4-2. 電話: 緊急なら応答、緊急でなければ無視が正解
+function judgePhone(isEmergency, didAnswer) {
+  return { correct: isEmergency === didAnswer };
+}
+
 // ---- 5. 数値の補助 ------------------------------------------------
 
 function percent(n, d) {
@@ -360,6 +369,7 @@ function buildSummaryContext(session) {
   const completed = completedList.length;
   const undelivered = level === 1 ? 0 : Math.max(0, session.undelivered);
   const noReplyList = completedList.filter((c) => !c.requiresReply);
+  const requiredList = completedList.filter((c) => c.requiresReply);
   return {
     level,
     total,
@@ -369,6 +379,7 @@ function buildSummaryContext(session) {
     replyAccuracy: percent(completedList.filter((c) => c.isReplyCorrect).length, completed),
     averageTotal: average(completedList.map((c) => secondsBetween(c.openedAt, c.completedAt))),
     noReplyAccuracy: percent(noReplyList.filter((c) => c.isReplyCorrect).length, noReplyList.length),
+    requiredReplyAccuracy: percent(requiredList.filter((c) => c.isReplyCorrect).length, requiredList.length),
     phoneCount: phones.length,
     phoneAccuracy: percent(phones.filter((p) => p.correct).length, phones.length),
     reviewRows: chats.filter((c) => c.status !== 'completed' || !c.isPrioCorrect || !c.isReplyCorrect),
@@ -445,6 +456,12 @@ function csvRow(chat, session) {
   return CSV_COLUMNS.map((col) => col.value(chat, session));
 }
 
+// 10-3. 受信順（createdAt 昇順、同値は id 昇順）に並べて csvRow を適用（元配列は変えない）
+function csvRows(chats, session) {
+  const sorted = (chats || []).slice().sort((a, b) => (a.createdAt - b.createdAt) || (a.id - b.id));
+  return sorted.map((chat) => csvRow(chat, session));
+}
+
 module.exports = {
   labels,
   normalize,
@@ -452,6 +469,7 @@ module.exports = {
   typingProgress,
   targetMarks,
   judge,
+  judgePhone,
   percent,
   average,
   formatStat,
@@ -466,4 +484,5 @@ module.exports = {
   replyResultText,
   csvHeader,
   csvRow,
+  csvRows,
 };

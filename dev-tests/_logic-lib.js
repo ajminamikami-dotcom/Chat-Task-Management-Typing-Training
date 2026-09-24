@@ -94,6 +94,8 @@ let DATA = null;
 
 function genSession(rng, index) {
   if (!DATA) DATA = loadData();
+  // 5% は「完璧なプレイ」（全件正解・全件完了・電話も全部正解）。既定の助言文・称賛の全行がこの経路でだけ出る。
+  const ideal = rng.chance(0.05);
   const level = rng.pick([1, 2, 3]);
   const durationSec = rng.pick(DURATIONS);
   const pool = level === 1 ? DATA.L1 : DATA.TY;
@@ -111,7 +113,7 @@ function genSession(rng, index) {
       requiresReply: d.requiresReply, status: "unread", selectedPrio: null, selectedAction: "", selectedReply: "", draft: "",
       createdAt, openedAt: null, prioAt: null, completedAt: null, isPrioCorrect: null, isReplyCorrect: null,
     };
-    const r = rng.next();
+    const r = ideal ? 1 : rng.next();
     if (r < 0.25) {
       // 未処理（開いたかどうかは半々。開いた後に優先度を選び直して未処理に戻したもの＝prioAt だけ残る、も混ぜる）
       if (rng.chance(0.5)) chat.openedAt = createdAt + rng.int(500, 60000);
@@ -127,17 +129,17 @@ function genSession(rng, index) {
       // 処理済
       chat.status = "completed";
       chat.openedAt = createdAt + rng.int(500, 60000);
-      chat.selectedPrio = rng.chance(0.7) ? d.prio : rng.pick(PRIOS);
+      chat.selectedPrio = ideal || rng.chance(0.7) ? d.prio : rng.pick(PRIOS);
       chat.prioAt = chat.openedAt + rng.int(300, 20000);
       chat.completedAt = chat.prioAt + rng.int(300, 90000);
       // まれに時刻の欠落（openedAt が無いまま完了、など壊れたデータ）も混ぜる
-      if (rng.chance(0.03)) chat.openedAt = null;
-      if (rng.chance(0.03)) chat.prioAt = null;
-      const wantReply = rng.chance(0.7) ? d.requiresReply : !d.requiresReply;
+      if (!ideal && rng.chance(0.03)) chat.openedAt = null;
+      if (!ideal && rng.chance(0.03)) chat.prioAt = null;
+      const wantReply = ideal || rng.chance(0.7) ? d.requiresReply : !d.requiresReply;
       let result;
       if (!wantReply) result = { action: "no_reply", selectedReply: "" };
-      else if (level === 1) result = { action: "reply", optionIndex: rng.chance(0.75) && d.correctOpt !== null ? d.correctOpt : rng.int(0, 2), selectedReply: "" };
-      else result = { action: "reply", selectedReply: mutateReply(rng, d.reply).draft };
+      else if (level === 1) result = { action: "reply", optionIndex: ideal || (rng.chance(0.75) && d.correctOpt !== null) ? d.correctOpt : rng.int(0, 2), selectedReply: "" };
+      else result = { action: "reply", selectedReply: ideal ? d.reply : mutateReply(rng, d.reply).draft };
       if (result.action === "reply" && level === 1) result.selectedReply = d.options[result.optionIndex] || "";
       chat.selectedAction = result.action;
       chat.selectedReply = result.selectedReply;
@@ -146,17 +148,19 @@ function genSession(rng, index) {
     }
     chats.push(chat);
   }
+  // 電話の記録。correct は実装（本体／参照）の judgePhone で付ける（outputsOf）。
   const phoneRecords = [];
   if (level === 3) {
     const n = rng.int(0, 7);
     for (let i = 0; i < n; i++) {
       const p = rng.pick(DATA.PHONE);
-      const didAnswer = rng.chance(0.65) ? p.isEmergency : !p.isEmergency;
-      phoneRecords.push({ caller: p.caller, isEmergency: p.isEmergency, didAnswer, correct: p.isEmergency === didAnswer });
+      const didAnswer = ideal || rng.chance(0.65) ? p.isEmergency : !p.isEmergency;
+      phoneRecords.push({ caller: p.caller, isEmergency: p.isEmergency, didAnswer });
     }
   }
-  const endReason = rng.chance(0.04) ? rng.pick(["", "unknown"]) : rng.pick(REASONS);   // 想定外の終了理由は「手動終了」扱い（仕様 §2）
-  const undelivered = level === 1 ? rng.pick([0, 0, 0, 2, 5]) : pool.length - delivered;    // Level 1 は常に 0 として扱われる（仕様 §7-1）
+  const endReason = ideal ? "complete" : rng.chance(0.04) ? rng.pick(["", "unknown"]) : rng.pick(REASONS);   // 想定外の終了理由は「手動終了」扱い（仕様 §2）
+  // Level 1 は常に 0 として扱われる（仕様 §7-1）。Level 2/3 は負値も混ぜて max(0, …) のクランプを検査する。
+  const undelivered = ideal ? 0 : level === 1 ? rng.pick([0, 0, 0, 2, 5]) : (rng.chance(0.03) ? rng.pick([-1, -5]) : pool.length - delivered);
   return { index, level, durationSec, chats, phoneRecords, endReason, undelivered };
 }
 
@@ -164,6 +168,11 @@ function genTypingCases(rng, session) {
   if (session.level === 1) return [];
   const cases = [];
   if (rng.chance(0.05)) cases.push({ draft: "", reply: "", kind: "empty-both" });   // 空のお手本では done にならない（仕様 §3-3）
+  if (rng.chance(0.05)) cases.push({ draft: "あ", reply: "", kind: "empty-target" }); // お手本が空で余分な文字がある案内文（仕様 §3-3）
+  if (rng.chance(0.2) && session.chats[0]) {                                        // お手本に空白があるときの space 行（仕様 §3-4）
+    const r = Array.from(session.chats[0].reply); r.splice(3, 0, rng.pick(["　", " ", "\n"]));
+    cases.push({ draft: mutateReply(rng, session.chats[0].reply).draft, reply: r.join(""), kind: "space-in-reply" });
+  }
   for (const chat of session.chats.slice(0, 3)) {
     const m = mutateReply(rng, chat.reply);
     cases.push({ draft: m.draft, reply: chat.reply, kind: m.kind });
@@ -181,7 +190,8 @@ function outputsOf(impl, session) {
     if (c.status === "completed") Object.assign(chat, impl.judge(chat, c._result, level));
     return chat;
   });
-  const sess = { level, durationSec: session.durationSec, chats, phoneRecords: session.phoneRecords, endReason: session.endReason, undelivered: session.undelivered };
+  const phoneRecords = session.phoneRecords.map((p) => ({ ...p, ...impl.judgePhone(p.isEmergency, p.didAnswer) }));
+  const sess = { level, durationSec: session.durationSec, chats, phoneRecords, endReason: session.endReason, undelivered: session.undelivered };
   const summary = impl.summarize(sess);
   const csvSession = { level, durationSec: session.durationSec, endReason: session.endReason, undelivered: session.undelivered };
   return {
@@ -201,14 +211,24 @@ function outputsOf(impl, session) {
     reviewTexts: summary.reviewRows.map((c) => [impl.priorityResultText(c), impl.replyResultText(c)]),
     completedPanels: chats.filter((c) => c.status === "completed").map((c) => impl.completedPanelText(c, level)),
     csvHeader: impl.csvHeader(),
-    csvRows: chats.slice().sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((c) => impl.csvRow(c, csvSession)),
+    phoneCorrect: phoneRecords.map((p) => p.correct),
+    csvRows: impl.csvRows(chats, csvSession),
     labels: impl.labels,
     timer: impl.formatTime(Math.max(0, session.durationSec - (session.index % 601))),   // 残り時間は 0 以上の整数秒（本体は clamp してから渡す）
   };
 }
 
-function fingerprint(obj) {
-  return crypto.createHash("sha256").update(JSON.stringify(obj)).digest("hex").slice(0, 16);
+// NaN / undefined / Infinity を null と同一視しない直列化（差分検査とゴールデンの両方で使う）
+function serialize(value) {
+  return JSON.stringify(value, (key, v) => {
+    if (v === undefined) return "__undefined__";
+    if (typeof v === "number" && !Number.isFinite(v)) return `__${String(v)}__`;
+    return v;
+  });
 }
 
-module.exports = { APP_SRC, extractLogicSource, loadLogic, loadData, makeRng, genSession, genTypingCases, outputsOf, fingerprint, mutateReply };
+function fingerprint(obj) {
+  return crypto.createHash("sha256").update(serialize(obj)).digest("hex").slice(0, 16);
+}
+
+module.exports = { APP_SRC, extractLogicSource, loadLogic, loadData, makeRng, genSession, genTypingCases, outputsOf, serialize, fingerprint, mutateReply };
