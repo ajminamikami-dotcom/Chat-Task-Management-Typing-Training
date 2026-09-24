@@ -312,7 +312,7 @@ ONLY=e2e03,e2e07 node run-all.js
 | e2e10_audit | 監査で確認した不具合の再発防止（＋変異検査・レビューで補強した 16 項目） | 73/73 | 0 | PASS |
 | e2e02_ideal | 理想プレイ | 14/14 | 0 | PASS |
 | e2e04_gameqa | ゲームQA手法10種 | 26/26 | 0 | PASS |
-| e2e01_playthrough | 模擬プレイスルー（CSV の受信順を実際に照合） | __E2E01__ | 0 | __P01__ |
+| e2e01_playthrough | 模擬プレイスルー（CSV の受信順を実際に照合） | 30/30 | 0 | PASS |
 | e2e08_judgment | 判定マトリクス総当たり | 15/15 | 0 | PASS |
 | e2e09_humanpace | 人間速度プレイ | 11/11 | 0 | PASS |
 
