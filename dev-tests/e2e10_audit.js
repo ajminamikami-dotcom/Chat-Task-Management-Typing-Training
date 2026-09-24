@@ -181,14 +181,28 @@ async function holdEnter(page, times = 6) {
   await page.click(sel.prio(firstOpened.prio)); await page.waitForTimeout(800);
   if (firstOpened.req) { await page.locator(sel.input).fill(firstOpened.reply); await page.keyboard.press("Enter"); } else await clickNoReply(page);
   await page.waitForTimeout(120);
-  // 優先度を選び直しても最初の判断時刻が保たれる（#45）
+  await finish(page);
+  {
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click(sel.csv)]);
+    const fs = require("fs"), path = require("path");
+    const p = path.join(require("./_lib").OUT_DIR, "audit_L2_first.csv"); await dl.saveAs(p);
+    const lines = fs.readFileSync(p, "utf8").replace(/^\uFEFF/, "").split("\n");
+    const head = lines[0].split(",").map((s) => s.replace(/"/g, ""));
+    const firstRow = lines.slice(1).map((l) => l.split('","').map((s) => s.replace(/"/g, ""))).find((r) => r[2] === firstOpened.sender);
+    const conf = Number(firstRow[head.indexOf("確認時間(秒)")]);
+    R.ok("AI-確認時間", conf < 1.4, `開き直しても確認時間は最初に開いた時刻から（${conf} 秒。付け替わると 1.5 秒以上になる）`);
+  }
+  await page.click(sel.menu);
+  // 優先度を選び直しても最初の判断時刻が保たれる（#45）: 新しいセッションで最初に開くチャットを使う
+  await start(page, 2, 600);
   a = await openReplyChat(page, data, 2);
   await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);
   await page.locator(sel.input).fill(a.reply); await page.waitForTimeout(1200);
   await page.click(sel.redo); await page.waitForTimeout(100); await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);
   await page.keyboard.press("Enter"); await page.waitForTimeout(120);
+  const expectUndelivered = data.TY.length - (await page.locator(sel.chatItems).count());   // 届いた件数はタイミングで変わる
   await finishNow(page); await page.waitForSelector(sel.result);
-  R.ok("E-未着", /未着 16 件/.test(await page.locator("#result-subtitle").innerText()) && /16件のチャットが届く前に/.test(await page.locator("#insight-grid").innerText()), "手動終了で未着の件数が結果画面に出て、「上位レベルへ」と言わない");
+  R.ok("E-未着", new RegExp(`未着 ${expectUndelivered} 件`).test(await page.locator("#result-subtitle").innerText()) && new RegExp(`${expectUndelivered}件のチャットが届く前に`).test(await page.locator("#insight-grid").innerText()), `手動終了で未着の件数（${expectUndelivered}）が結果画面に出て、「上位レベルへ」と言わない`);
   {
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click(sel.csv)]);
     const fs = require("fs"), path = require("path");
@@ -197,11 +211,8 @@ async function holdEnter(page, times = 6) {
     const head = lines[0].split(",").map((s) => s.replace(/"/g, ""));
     const done = lines.slice(1).map((l) => l.split('","').map((s) => s.replace(/"/g, ""))).find((r) => r[1] === "処理済");
     const col = (name) => done[head.indexOf(name)];
-    R.ok("AI-列", head.includes("終了理由") && head.includes("未着件数") && col("終了理由") === "手動終了" && col("未着件数") === "16", "CSV に終了理由と未着件数が入る");
+    R.ok("AI-列", head.includes("終了理由") && head.includes("未着件数") && col("終了理由") === "手動終了" && col("未着件数") === String(expectUndelivered), "CSV に終了理由と未着件数が入る");
     R.ok("AI-選び直し", Number(col("返信時間(秒)")) >= 2.5, `選び直しても入力時間が返信時間に残る（返信 ${col("返信時間(秒)")} 秒 / 振り分け ${col("振り分け時間(秒)")} 秒）`);
-    const firstRow = lines.slice(1).map((l) => l.split('","').map((s) => s.replace(/"/g, ""))).find((r) => r[2] === firstOpened.sender);
-    const conf = Number(firstRow[head.indexOf("確認時間(秒)")]);
-    R.ok("AI-確認時間", conf < 1.4, `開き直しても確認時間は最初に開いた時刻から（${conf} 秒。付け替わると 1.5 秒以上になる）`);
     R.ok("AI-名前", /_\d{8}_\d{4}\.csv$/.test(dl.suggestedFilename()), "ファイル名に時刻が入り同日の複数回で重ならない: " + dl.suggestedFilename());
   }
   R.ok("L-結果離脱", await page.evaluate(() => { const e = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; }), "結果画面でも F5／戻るに離脱確認が出る");
@@ -248,17 +259,18 @@ async function holdEnter(page, times = 6) {
     R.ok("V-停止Tab", (await active(page)) === "resume-btn" && (await page.evaluate(() => document.querySelector(".game-shell").inert)) === true, "停止中は Tab が停止画面の中に留まり、背面は不活性");
     await page.keyboard.press("Escape"); await page.waitForTimeout(450);   // 再開直後 0.4 秒はマウスクリックを受け付けない仕様
     {
+      await page.waitForTimeout(1100);   // 表示は 1 秒ごとに更新される
       const [m0, s0] = timerBefore.split(":").map(Number);
       const [m1, s1] = (await page.locator(sel.timer).innerText()).split(":").map(Number);
       const diff = (m0 * 60 + s0) - (m1 * 60 + s1);
-      R.ok("V-再開後の時計", diff >= 0 && diff <= 2, `再開後は停止前の続きから進む（停止 3 秒＋再開 0.45 秒で減った表示は ${diff} 秒）`);
+      R.ok("V-再開後の時計", diff >= 1 && diff <= 2, `再開後は停止前の続きから進む（停止 3 秒のあと再開 1.5 秒で減った表示は ${diff} 秒。停止分を戻さないと 4 秒以上減る）`);
     }
     if (a.req) { await page.locator(sel.input).fill(a.reply); await page.keyboard.press("Enter"); } else await clickNoReply(page);
     await page.waitForTimeout(120);
     await finish(page);
     const s = await scoreText(page);
     const avg = Number((s.match(/平均処理 ([\d.]+)/) || [])[1]);
-    R.ok("V-停止時間", avg < 2.5, `3秒停止しても平均処理に含まれない（平均処理 ${avg} 秒）`);
+    R.ok("V-停止時間", avg < 3.6, `3秒停止しても平均処理に含まれない（平均処理 ${avg} 秒。実操作は約 2.6 秒、停止分が入ると 5.5 秒以上）`);
     await page.click(sel.menu);
   }
 
@@ -278,12 +290,7 @@ async function holdEnter(page, times = 6) {
     R.ok("AX-直後無視", (await p2.locator(sel.phone).count()) === 1, "表示から 0.5 秒以内の Enter/Space では応答にならない");
     // 背面クリック不可（inert）
     R.ok("AD-背面", (await p2.evaluate(() => document.querySelector(".game-shell").inert)) === true, "着信中は背面が不活性");
-    // 着信中の Alt+数字は背面に届かない
-    {
-      const badgesBefore = await p2.locator("#chat-list .chat-item").allInnerTexts();
-      await p2.keyboard.press("Alt+Digit1"); await p2.waitForTimeout(100);
-      R.ok("AD-着信中Alt", JSON.stringify(await p2.locator("#chat-list .chat-item").allInnerTexts()) === JSON.stringify(badgesBefore) && (await p2.locator(sel.phone).count()) === 1, "着信中に Alt+数字 を押しても背面の優先度は変わらない");
-    }
+
     // Shift+Tab でも背面へ抜けない
     await p2.evaluate(() => document.body.focus()); await p2.keyboard.press("Shift+Tab");
     R.ok("AD-ShiftTab", ["answer-phone-btn", "ignore-phone-btn", "phone-pause-btn"].includes(await active(p2)), "本文クリック後の Shift+Tab でも着信画面の中に留まる");
@@ -333,7 +340,18 @@ async function holdEnter(page, times = 6) {
     await p2.mouse.dblclick(ib.x + ib.width / 2, ib.y + ib.height / 2); await p2.waitForTimeout(200);
     R.ok("L-無視連打", (await counters(p2)).completed === c1.completed && (await p2.locator(sel.phone).count()) === 0, "「無視する」のダブルクリックで背面の完了ボタンが押されない");
   }
+  // 未処理のチャットを開いた状態で着信を待ち、着信中の Alt+数字 が背面に届かないことを確かめる
+  {
+    const unread = p2.locator("#chat-list .chat-item.unread");
+    if (await unread.count()) { await unread.first().click(); await p2.waitForTimeout(120); }
+  }
   R.ok("AX-3回目", await waitPhone(p2), "3回目の着信");
+  {
+    const badgesBefore = await p2.locator("#chat-list .chat-item").allInnerTexts();
+    const headingBefore = await p2.locator("#chat-status-badge").innerText();
+    await p2.keyboard.press("Alt+Digit1"); await p2.waitForTimeout(120);
+    R.ok("AD-着信中Alt", JSON.stringify(await p2.locator("#chat-list .chat-item").allInnerTexts()) === JSON.stringify(badgesBefore) && (await p2.locator("#chat-status-badge").innerText()) === headingBefore && (await p2.locator(sel.phone).count()) === 1, `着信中に Alt+数字 を押しても背面の優先度は変わらない（開いていたチャット: ${headingBefore}）`);
+  }
   await dismissPhone(p2, true);
   R.ok("AD-応答後", /chat-item|inbox-title/.test(await active(p2)), "応答した後は受信トレイにフォーカスが移る（Tab が終了に飛ばない）");
   await finish(p2);
