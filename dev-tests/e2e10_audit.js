@@ -342,15 +342,17 @@ async function holdEnter(page, times = 6) {
   }
   // 未処理のチャットを開いた状態で着信を待ち、着信中の Alt+数字 が背面に届かないことを確かめる
   {
+    await p2.waitForTimeout(450);   // 着信画面を閉じた直後 0.4 秒はマウス操作を受け付けない仕様
     const unread = p2.locator("#chat-list .chat-item.unread");
     if (await unread.count()) { await unread.first().click(); await p2.waitForTimeout(120); }
   }
   R.ok("AX-3回目", await waitPhone(p2), "3回目の着信");
   {
+    await p2.waitForTimeout(600);   // 表示直後 0.5 秒のキー締め出しの外で押す（門番ではなく Alt の規則そのものを検査する）
     const badgesBefore = await p2.locator("#chat-list .chat-item").allInnerTexts();
     const headingBefore = await p2.locator("#chat-status-badge").innerText();
     await p2.keyboard.press("Alt+Digit1"); await p2.waitForTimeout(120);
-    R.ok("AD-着信中Alt", JSON.stringify(await p2.locator("#chat-list .chat-item").allInnerTexts()) === JSON.stringify(badgesBefore) && (await p2.locator("#chat-status-badge").innerText()) === headingBefore && (await p2.locator(sel.phone).count()) === 1, `着信中に Alt+数字 を押しても背面の優先度は変わらない（開いていたチャット: ${headingBefore}）`);
+    R.ok("AD-着信中Alt", headingBefore === "未処理" && JSON.stringify(await p2.locator("#chat-list .chat-item").allInnerTexts()) === JSON.stringify(badgesBefore) && (await p2.locator("#chat-status-badge").innerText()) === headingBefore && (await p2.locator(sel.phone).count()) === 1, `着信中に Alt+数字 を押しても背面の優先度は変わらない（開いていたチャットの状態: ${headingBefore}）`);
   }
   await dismissPhone(p2, true);
   R.ok("AD-応答後", /chat-item|inbox-title/.test(await active(p2)), "応答した後は受信トレイにフォーカスが移る（Tab が終了に飛ばない）");
