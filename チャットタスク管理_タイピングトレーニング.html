@@ -1358,14 +1358,240 @@
     menu: document.getElementById("menu-btn")
   };
 
-  const labels = {
-    high: "高",
-    mid: "中",
-    low: "低",
-    unread: "未処理",
-    unreplied: "保留",
-    completed: "処理済"
-  };
+  /* @@LOGIC_BEGIN
+     判定・集計・表示文・CSV・入力一致のロジック。
+     このブロックは DOM・現在時刻・乱数・state に一切依存しない純粋関数だけで構成する（原則の一本化）。
+     dev-tests の差分検査（diff-check.js）はこのブロックをそのまま切り出して Node で動かし、
+     仕様書（dev-tests/spec/judgment-spec.md）だけから書かれた参照実装と乱数入力で突き合わせる。
+     したがって「判定・集計・表示文に関わる規則」はここ以外に書かない。 */
+  const Logic = (() => {
+    const labels = { high: "高", mid: "中", low: "低", unread: "未処理", unreplied: "保留", completed: "処理済" };
+    const END_REASON = { time: "時間終了", complete: "全件完了", manual: "手動終了" };
+    const GOOD = 80;                   // 正答率がこの値以上なら「安定」、未満なら「次の練習」に助言を出す
+    const PRAISE_MIN_COMPLETED = 3;    // 完了数がこれ未満なら「安定しています」と断定しない
+    const PRAISE_MIN_PHONES = 2;       // 着信数がこれ未満なら電話判断を称賛しない
+
+    // 空白は無視する。IME の句読点設定が「，．」でも「、。」と同じ文字として扱う（お手本どおり打っても不一致になるのを防ぐ）。
+    function normalize(value) {
+      return String(value || "").replace(/\s+/g, "").replace(/，/g, "、").replace(/．/g, "。");
+    }
+
+    function commonPrefixLength(a, b) {
+      const max = Math.min(a.length, b.length);
+      let index = 0;
+      while (index < max && a[index] === b[index]) index += 1;
+      return index;
+    }
+
+    // 入力欄の下に出す進捗（%・送信可否・案内文）
+    function typingProgress(draftText, replyText) {
+      const draft = normalize(draftText);
+      const target = normalize(replyText);
+      const matched = commonPrefixLength(draft, target);
+      const extra = Math.max(0, draft.length - target.length);
+      const done = draft === target && target.length > 0;
+      let percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
+      // 一致していないのに 100% と見せない
+      if (!done && percentValue === 100) percentValue = 99;
+      let feedback;
+      if (done) feedback = "入力が一致しました。送信できます。";
+      else if (matched === target.length && extra > 0) feedback = `文字が多すぎます。末尾の ${extra} 文字を消してください（一致 ${matched}/${target.length} 文字）`;
+      else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字。赤い文字の位置から直してください`;
+      else feedback = `一致 ${matched}/${target.length} 文字`;
+      return { percent: percentValue, done, feedback, matched, extra };
+    }
+
+    // お手本の文字ごとの色（typed=緑 / wrong=赤 / plain=未入力 / space=空白）と、お手本より長く打った余分な文字
+    // 先頭からの一致分を緑、最初の誤りから入力済みの範囲を赤にする（位置が偶然合った文字を緑にしない）。
+    function targetMarks(draftText, replyText) {
+      const draft = normalize(draftText);
+      const target = normalize(replyText);
+      const matched = commonPrefixLength(draft, target);
+      let position = 0;
+      const marks = Array.from(String(replyText || "")).map((char) => {
+        if (/\s/.test(char)) return { char, state: "space" };
+        const index = position;
+        position += 1;
+        if (index < matched) return { char, state: "typed" };
+        if (index < draft.length) return { char, state: "wrong" };
+        return { char, state: "plain" };
+      });
+      return { marks, extra: draft.length > target.length ? draft.slice(target.length) : "" };
+    }
+
+    // 1件の完了時の正誤。優先度と返信は独立に判定する（一因一罰）。
+    function judge(chat, result, level) {
+      const isPrioCorrect = chat.correctPrio === chat.selectedPrio;
+      let isReplyCorrect;
+      if (result.action === "no_reply") {
+        isReplyCorrect = chat.requiresReply === false;
+      } else if (level === 1) {
+        isReplyCorrect = chat.requiresReply === true && result.optionIndex === chat.correctOpt;
+      } else {
+        isReplyCorrect = chat.requiresReply === true && normalize(result.selectedReply) === normalize(chat.reply);
+      }
+      return { isPrioCorrect, isReplyCorrect };
+    }
+
+    // 分母が0のときに 0% を返すと「全問不正解」に見えてしまうため null を返し、表示側で「-」に置き換える。
+    function percent(numerator, denominator) {
+      if (!denominator) return null;
+      return Math.round((numerator / denominator) * 100);
+    }
+
+    // secondsBetween は toFixed で文字列を返すため、数値化してから平均を取る。
+    // 未計測の項目は空文字なので、Number("") が 0 になって平均を歪めないよう先に除外する。
+    function average(values) {
+      const valid = values
+        .filter((value) => value !== "" && value !== null && value !== undefined)
+        .map(Number)
+        .filter((value) => Number.isFinite(value));
+      if (!valid.length) return null;
+      return (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1);
+    }
+
+    // 集計できなかった値は「-」で表示する。
+    function formatStat(value) {
+      return value === null || value === undefined ? "-" : String(value);
+    }
+
+    function secondsBetween(start, end) {
+      if (!start || !end) return "";
+      return ((end - start) / 1000).toFixed(1);
+    }
+
+    function formatTime(totalSeconds) {
+      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+      const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function levelSubtitle(level, durationSec) {
+      if (level === 1) return "選択式・全件完了で終了";
+      if (level === 2) return `${Math.round(durationSec / 60)}分・タイピング式`;
+      return `${Math.round(durationSec / 60)}分・タイピング式・電話割り込み`;
+    }
+
+    function endReasonText(reason) {
+      return END_REASON[reason] || END_REASON.manual;
+    }
+
+    function resultSubtitle(level, durationSec, reason, undelivered) {
+      return `${levelSubtitle(level, durationSec)} / ${endReasonText(reason)}${undelivered ? `（未着 ${undelivered} 件）` : ""}`;
+    }
+
+    // 結果画面の集計。session: { level, chats, phoneRecords, undelivered }
+    function summarize(session) {
+      const level = session.level;
+      const chats = session.chats;
+      const phoneRecords = session.phoneRecords || [];
+      const undelivered = level === 1 ? 0 : Math.max(0, session.undelivered || 0);
+      const completed = chats.filter((chat) => chat.status === "completed");
+      const total = chats.length;
+      const prioAccuracy = percent(completed.filter((chat) => chat.isPrioCorrect).length, completed.length);
+      const replyAccuracy = percent(completed.filter((chat) => chat.isReplyCorrect).length, completed.length);
+      const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
+      const noReplyItems = completed.filter((chat) => !chat.requiresReply);
+      const noReplyAccuracy = percent(noReplyItems.filter((chat) => chat.isReplyCorrect).length, noReplyItems.length);
+      const phoneAccuracy = percent(phoneRecords.filter((phone) => phone.correct).length, phoneRecords.length);
+      const reviewRows = chats.filter((chat) => {
+        if (chat.status !== "completed") return true;
+        return !chat.isPrioCorrect || !chat.isReplyCorrect;
+      });
+      // 返信の誤りを内訳で見て、助言を実際の誤りに合わせる
+      const repliedToNoReply = completed.some((chat) => !chat.requiresReply && chat.selectedAction === "reply");
+      const skippedRequired = completed.some((chat) => chat.requiresReply && chat.selectedAction === "no_reply");
+      const wrongReplyText = completed.some((chat) => chat.requiresReply && chat.selectedAction === "reply" && !chat.isReplyCorrect);
+      const enough = completed.length >= PRAISE_MIN_COMPLETED;
+
+      const strengths = [];
+      if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
+      if (enough && prioAccuracy !== null && prioAccuracy >= GOOD) strengths.push("優先度の判断が安定しています。");
+      if (enough && replyAccuracy !== null && replyAccuracy >= GOOD && !(noReplyAccuracy !== null && noReplyAccuracy < GOOD)) strengths.push("返信する、返信しないの切り分けが安定しています。");
+      if (level === 3 && phoneRecords.length >= PRAISE_MIN_PHONES && phoneAccuracy !== null && phoneAccuracy >= GOOD) strengths.push("電話割り込みの緊急度判断が安定しています。");
+      if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
+
+      const nextSteps = [];
+      if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);
+      if (chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
+      if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
+      if (replyAccuracy !== null && replyAccuracy < GOOD) {
+        if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
+        if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+        if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
+      } else if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) {
+        nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+      }
+      if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
+      if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
+
+      return { total, completed: completed.length, undelivered, prioAccuracy, replyAccuracy, averageTotal, phoneAccuracy, strengths, nextSteps, reviewRows };
+    }
+
+    // 処理済チャットを開き直したときの正誤と訂正文
+    function completedPanelText(chat, level) {
+      const prioText = chat.isPrioCorrect ? "優先度は正解です。" : `優先度は ${labels[chat.correctPrio]} が正解です。`;
+      let replyText;
+      if (chat.isReplyCorrect) replyText = "返信処理は正解です。";
+      else if (!chat.requiresReply) replyText = "返信せずに完了するのが正解です。";
+      else if (level === 1 && chat.correctOpt !== null) replyText = `正しい返信は「${chat.options[chat.correctOpt]}」です。`;
+      else replyText = `正しい返信は「${chat.reply}」です。`;
+      return { prioText, replyText };
+    }
+
+    // 結果画面「要確認タスク」の各列
+    function priorityResultText(chat) {
+      if (chat.status !== "completed") return `正解: ${labels[chat.correctPrio]}`;
+      return `${chat.isPrioCorrect ? "正解" : "不正解"} / 正解: ${labels[chat.correctPrio]} / 選択: ${labels[chat.selectedPrio]}`;
+    }
+
+    function replyResultText(chat) {
+      if (chat.status !== "completed") return chat.requiresReply ? "返信必要" : "返信不要";
+      return `${chat.isReplyCorrect ? "正解" : "不正解"} / ${chat.requiresReply ? "返信必要" : "返信不要"}`;
+    }
+
+    function csvHeader() {
+      return [
+        "レベル", "状態", "送信者", "メッセージ内容", "正解優先度", "選択優先度", "優先度正誤", "返信必要", "選択処理", "返信正誤",
+        "確認時間(秒)", "振り分け時間(秒)", "返信時間(秒)", "総処理時間(秒)", "制限時間(分)", "終了理由", "未着件数"
+      ];
+    }
+
+    // CSV の1行。session: { level, durationSec, endReason, undelivered }
+    function csvRow(chat, session) {
+      const level = session.level;
+      return [
+        `Level ${level}`,
+        labels[chat.status],
+        chat.sender,
+        chat.text,
+        labels[chat.correctPrio],
+        chat.selectedPrio ? labels[chat.selectedPrio] : "",
+        chat.isPrioCorrect === null ? "" : chat.isPrioCorrect ? "正解" : "不正解",
+        chat.requiresReply ? "必要" : "不要",
+        chat.selectedAction === "reply" ? "返信" : chat.selectedAction === "no_reply" ? "返信せず完了" : "",
+        chat.isReplyCorrect === null ? "" : chat.isReplyCorrect ? "正解" : "不正解",
+        chat.openedAt ? secondsBetween(chat.createdAt, chat.openedAt) : "",
+        chat.prioAt && chat.selectedPrio ? secondsBetween(chat.openedAt, chat.prioAt) : "",
+        chat.completedAt ? secondsBetween(chat.prioAt, chat.completedAt) : "",
+        chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : "",
+        level === 1 ? "" : String(Math.round(session.durationSec / 60)),
+        endReasonText(session.endReason),
+        level === 1 ? "0" : String(Math.max(0, session.undelivered || 0))
+      ];
+    }
+
+    return {
+      labels, normalize, commonPrefixLength, typingProgress, targetMarks, judge,
+      percent, average, formatStat, secondsBetween, formatTime,
+      levelSubtitle, endReasonText, resultSubtitle, summarize,
+      completedPanelText, priorityResultText, replyResultText, csvHeader, csvRow
+    };
+  })();
+  /* @@LOGIC_END */
+
+  const labels = Logic.labels;
+  const { normalize, commonPrefixLength, percent, average, formatStat, secondsBetween, formatTime } = Logic;
 
   const state = {
     level: 1,
@@ -1381,10 +1607,6 @@
     lastPhone: null,
     focusBeforePhone: null,
     focusBeforePhoneChatId: null,
-    panelShownAt: 0,
-    overlayClosedAt: 0,
-    phoneShownAt: 0,
-    lastPrioClick: null,
     composing: false,
     phoneDefer: 0,
     chatDueAt: 0,
@@ -1439,8 +1661,8 @@
     els.finishBtn.addEventListener("click", openFinishConfirm);
     els.finishConfirmBtn.addEventListener("click", () => endGame("manual"));
     els.finishCancelBtn.addEventListener("click", closeFinishConfirm);
-    els.answerPhone.addEventListener("click", () => handlePhone(true));
-    els.ignorePhone.addEventListener("click", () => handlePhone(false));
+    els.answerPhone.addEventListener("click", (event) => handlePhone(true, event));
+    els.ignorePhone.addEventListener("click", (event) => handlePhone(false, event));
     els.downloadCsv.addEventListener("click", downloadCSV);
     els.retry.addEventListener("click", () => startGame(state.lastLevel));
     els.menu.addEventListener("click", () => showScreen("start-screen"));
@@ -1552,11 +1774,40 @@
     return Boolean(event && (event.clientX || event.clientY));
   }
 
-  // 優先度ボタンを押した直後、同じ場所に現れた返信ボタンへの2回目のクリック（ゆっくりめのダブルクリック）を無視する。
-  function isRepeatOfPriorityClick(event) {
-    const last = state.lastPrioClick;
-    if (!last || !isPointerEvent(event)) return false;
-    return Date.now() - last.at < 700 && Math.abs(event.clientX - last.x) < 24 && Math.abs(event.clientY - last.y) < 24;
+  // ---- 操作の門番（原則: 画面が切り替わった直後は、切り替わる前の画面に向けた操作を受け付けない） ----
+  // 1. 画面が切り替わった（優先度→返信パネルの差し替え、着信・停止画面の開閉）直後 POINTER_SETTLE_MS はマウス操作を無視する
+  //    （ダブルクリックの2回目が、同じ場所に現れた別のボタンに落ちるのを防ぐ）。
+  // 2. 優先度ボタンをマウスで押した直後 SAME_SPOT_MS は、同じ位置（SAME_SPOT_PX 以内）へのクリックを無視する（ゆっくりなダブルクリック）。
+  // 3. 着信画面の表示直後 KEY_SETTLE_MS はキー操作も無視する（入力中の Space/Enter の続きが届く唯一の場面）。
+  // それ以外のキーボード操作は常に受け付ける（Enter がダブルクリックの2回目になることはない）。
+  // キーの長押し（自動リピート）は操作として扱わない（bindEvents の keydown で捨てる）。
+  const POINTER_SETTLE_MS = 400;
+  const SAME_SPOT_MS = 700;
+  const SAME_SPOT_PX = 24;
+  const KEY_SETTLE_MS = 500;
+  const gate = { changedAt: 0, spot: null, keyLockedUntil: 0 };
+
+  function resetGate() {
+    gate.changedAt = 0;
+    gate.spot = null;
+    gate.keyLockedUntil = 0;
+  }
+
+  // 画面が切り替わったことを記録する。切り替えの原因がマウスクリックなら、その位置も覚える。
+  function markScreenChange(event, lockKeys) {
+    gate.changedAt = Date.now();
+    gate.spot = isPointerEvent(event) ? { x: event.clientX, y: event.clientY, at: gate.changedAt } : null;
+    if (lockKeys) gate.keyLockedUntil = gate.changedAt + KEY_SETTLE_MS;
+  }
+
+  // この操作を受け付けてよいか。event が無い／キーボード由来なら、キーの締め出し中でない限り受け付ける。
+  function accepts(event) {
+    const now = Date.now();
+    if (!isPointerEvent(event)) return now >= gate.keyLockedUntil;
+    if (now - gate.changedAt < POINTER_SETTLE_MS) return false;
+    const spot = gate.spot;
+    if (spot && now - spot.at < SAME_SPOT_MS && Math.abs(event.clientX - spot.x) < SAME_SPOT_PX && Math.abs(event.clientY - spot.y) < SAME_SPOT_PX) return false;
+    return true;
   }
 
   function loadSettings() {
@@ -1611,10 +1862,7 @@
     state.nextPoolIndex = 0;
     state.focusBeforePhone = null;
     state.focusBeforePhoneChatId = null;
-    state.panelShownAt = 0;
-    state.overlayClosedAt = 0;
-    state.phoneShownAt = 0;
-    state.lastPrioClick = null;
+    resetGate();
     state.composing = false;
     state.phoneDefer = 0;
     state.chatDueAt = 0;
@@ -1652,9 +1900,12 @@
   }
 
   function getLevelSubtitle(level) {
-    if (level === 1) return "選択式・全件完了で終了";
-    if (level === 2) return `${Math.round(state.durationSec / 60)}分・タイピング式`;
-    return `${Math.round(state.durationSec / 60)}分・タイピング式・電話割り込み`;
+    return Logic.levelSubtitle(level, state.durationSec);
+  }
+
+  // 途中で終了した場合に、まだ届いていなかったチャットの数
+  function undeliveredCount() {
+    return state.level === 1 ? 0 : Math.max(0, state.pool.length - state.nextPoolIndex);
   }
 
   function createChat(data) {
@@ -1802,8 +2053,7 @@
 
   function selectChat(id, event) {
     if (state.gameOver || state.paused) return;
-    // 停止画面・着信画面を閉じた直後のクリック（ダブルクリックの2回目）で別のチャットに切り替わらないようにする。
-    if (isPointerEvent(event) && Date.now() - state.overlayClosedAt < 400) return;
+    if (!accepts(event)) return;
     const chat = state.chats.find((item) => item.id === id);
     if (!chat) return;
     state.activeId = id;
@@ -1873,17 +2123,16 @@
 
   function setPriority(prio, event) {
     if (state.gameOver || state.paused) return;
-    if (isPointerEvent(event) && Date.now() - state.overlayClosedAt < 400) return;
+    if (!accepts(event)) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.selectedPrio = prio;
     chat.status = "unreplied";
     // 選び直しても最初に判断した時刻を保つ（CSV の振り分け時間／返信時間が付け替わらない）。
     if (!chat.prioAt) chat.prioAt = Date.now();
-    // マウスで押した直後だけ、同じ場所に現れる返信ボタンへの2回目のクリックを弾く（キー操作にはガードを掛けない）。
+    // 優先度パネルが返信パネルに差し替わる（同じ場所に別のボタンが現れる）。
     const pointer = isPointerEvent(event);
-    state.lastPrioClick = pointer ? { x: event.clientX, y: event.clientY, at: Date.now() } : null;
-    state.panelShownAt = pointer ? Date.now() : 0;
+    if (pointer) markScreenChange(event);
     renderAll();
     if (state.level === 1) {
       const first = els.taskPanel.querySelector(".choice-btn");
@@ -1949,20 +2198,13 @@
         </section>
       `;
       els.taskPanel.querySelectorAll("[data-option]").forEach((button) => {
-        button.addEventListener("click", (event) => {
-          if (isRepeatOfPriorityClick(event)) return;
-          finishChat({
-            action: "reply",
-            selectedReply: chat.options[Number(button.dataset.option)] || "",
-            optionIndex: Number(button.dataset.option),
-            fromKeyboard: !isPointerEvent(event)
-          });
-        });
+        button.addEventListener("click", (event) => finishChat({
+          action: "reply",
+          selectedReply: chat.options[Number(button.dataset.option)] || "",
+          optionIndex: Number(button.dataset.option)
+        }, event));
       });
-      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", (event) => {
-        if (isRepeatOfPriorityClick(event)) return;
-        finishChat({ action: "no_reply", selectedReply: "", fromKeyboard: !isPointerEvent(event) });
-      });
+      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", (event) => finishChat({ action: "no_reply", selectedReply: "" }, event));
       els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
       return;
     }
@@ -2019,19 +2261,19 @@
       // IME の変換確定の Enter（isComposing / keyCode 229）と長押しのリピートは送信に使わない
       if (event.isComposing || event.keyCode === 229 || event.repeat) return;
       event.preventDefault();
-      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft, fromKeyboard: true });
+      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft }, event);
     });
     els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", (event) => {
-      if (isRepeatOfPriorityClick(event)) return;
+      if (!accepts(event)) return;
       if (!typingProgress(chat).done) {
         showToast("お手本と一致していません。赤い文字の位置から直してください。");
         focusTypingInput(true);
         return;
       }
-      finishChat({ action: "reply", selectedReply: chat.draft, fromKeyboard: !isPointerEvent(event) });
+      finishChat({ action: "reply", selectedReply: chat.draft }, event);
     });
     noReplyBtn.addEventListener("click", (event) => {
-      if (isRepeatOfPriorityClick(event)) return;
+      if (!accepts(event)) return;
       // 入力途中の文章があるのに「返信せずに完了」が押されたときは、誤クリックや Tab の着地による誤完了を防ぐため、もう一度押してもらう。
       if (normalize(chat.draft) && noReplyBtn.dataset.confirm !== "1") {
         noReplyBtn.dataset.confirm = "1";
@@ -2040,15 +2282,14 @@
         return;
       }
       resetNoReplyConfirm();
-      finishChat({ action: "no_reply", selectedReply: "", fromKeyboard: !isPointerEvent(event) });
+      finishChat({ action: "no_reply", selectedReply: "" }, event);
     });
     els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
     focusTypingInput(true);
   }
 
   function renderCompletedPanel(chat) {
-    const prioText = chat.isPrioCorrect ? "優先度は正解です。" : `優先度は ${labels[chat.correctPrio]} が正解です。`;
-    const replyText = chat.isReplyCorrect ? "返信処理は正解です。" : getReplyCorrection(chat);
+    const { prioText, replyText } = Logic.completedPanelText(chat, state.level);
     els.taskPanel.innerHTML = `
       <section class="step">
         <h3>処理済</h3>
@@ -2056,12 +2297,6 @@
         <p class="feedback-line">${escapeHtml(replyText)}</p>
       </section>
     `;
-  }
-
-  function getReplyCorrection(chat) {
-    if (!chat.requiresReply) return "返信せずに完了するのが正解です。";
-    if (state.level === 1 && chat.correctOpt !== null) return `正しい返信は「${chat.options[chat.correctOpt]}」です。`;
-    return `正しい返信は「${chat.reply}」です。`;
   }
 
   function focusTypingInput(keepCursor) {
@@ -2083,10 +2318,9 @@
     showToast("コピー、貼り付け、ドラッグ入力は使えません。");
   }
 
-  function finishChat(result) {
+  function finishChat(result, event) {
     if (state.gameOver || state.paused) return;
-    // パネル表示直後や、着信・停止画面を閉じた直後のクリックはダブルクリックの2回目なので受け付けない（キー操作は対象外）。
-    if (!result.fromKeyboard && Date.now() - state.panelShownAt < 400) return;
+    if (!accepts(event)) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
 
@@ -2094,15 +2328,7 @@
     chat.completedAt = Date.now();
     chat.selectedAction = result.action;
     chat.selectedReply = result.selectedReply || "";
-    chat.isPrioCorrect = chat.correctPrio === chat.selectedPrio;
-
-    if (result.action === "no_reply") {
-      chat.isReplyCorrect = chat.requiresReply === false;
-    } else if (state.level === 1) {
-      chat.isReplyCorrect = chat.requiresReply === true && result.optionIndex === chat.correctOpt;
-    } else {
-      chat.isReplyCorrect = chat.requiresReply === true && normalize(chat.selectedReply) === normalize(chat.reply);
-    }
+    Object.assign(chat, Logic.judge(chat, result, state.level));
 
     state.activeId = null;
     renderAll();
@@ -2132,16 +2358,16 @@
     state.focusBeforePhone = before;
     state.focusBeforePhoneChatId = before && before.dataset && before.dataset.chatId ? before.dataset.chatId : null;
     els.phoneModal.classList.add("show");
-    state.phoneShownAt = Date.now();
+    // 着信画面が前面に出た（入力中の Space/Enter の続きが届く場面なので、キーも締め出す）
+    markScreenChange(null, true);
     setShellInert();
     // 入力中の Space／Enter が「応答する」に落ちないよう、初期フォーカスはボタンではなく着信画面そのものに置く。
     els.phoneCard.focus();
   }
 
-  function handlePhone(didAnswer) {
+  function handlePhone(didAnswer, event) {
     if (!state.currentPhone || state.gameOver || state.paused) return;
-    // 表示直後の操作は入力の続き（IME の Space/Enter）やダブルクリックの2回目なので受け付けない。
-    if (Date.now() - state.phoneShownAt < 500) return;
+    if (!accepts(event)) return;
     const correct = state.currentPhone.isEmergency === didAnswer;
     state.phoneRecords.push({
       caller: state.currentPhone.caller,
@@ -2152,9 +2378,8 @@
     });
     els.phoneModal.classList.remove("show");
     state.currentPhone = null;
-    // 着信画面を閉じた直後のクリック（ダブルクリックの2回目）が背面の完了ボタンや受信トレイに落ちないようにする。
-    state.panelShownAt = Date.now();
-    state.overlayClosedAt = Date.now();
+    // 着信画面が閉じて背面が露出した
+    markScreenChange(null);
     setShellInert();
 
     if (didAnswer) {
@@ -2220,16 +2445,15 @@
         });
       }
       state.pausedAt = 0;
-      // 停止画面を閉じた直後のクリック（ダブルクリックの2回目）が背面の完了ボタンや受信トレイに落ちないようにする。
-      state.panelShownAt = Date.now();
-      state.overlayClosedAt = Date.now();
+      // 停止画面が閉じて背面が露出した
+      markScreenChange(null);
       if (state.chatLeft !== null) scheduleNextChat(Math.max(1500, state.chatLeft));
       if (state.level === 3 && !state.currentPhone && state.phoneLeft !== null) scheduleNextPhone(Math.max(2200, state.phoneLeft));
       state.chatLeft = null;
       state.phoneLeft = null;
       if (state.currentPhone) {
         els.phoneModal.classList.add("show");
-        state.phoneShownAt = Date.now();
+        markScreenChange(null, true);
         setShellInert();
         els.phoneCard.focus();
       } else {
@@ -2258,9 +2482,8 @@
   }
 
   function showResults(reason) {
-    const summary = buildSummary(reason);
-    const undelivered = summary.undelivered ? `（未着 ${summary.undelivered} 件）` : "";
-    els.resultSubtitle.textContent = `${getLevelSubtitle(state.level)} / ${getEndReason(reason)}${undelivered}`;
+    const summary = Logic.summarize({ level: state.level, chats: state.chats, phoneRecords: state.phoneRecords, undelivered: undeliveredCount() });
+    els.resultSubtitle.textContent = Logic.resultSubtitle(state.level, state.durationSec, reason, summary.undelivered);
     els.scoreGrid.innerHTML = `
       ${scoreCard("完了", `${summary.completed}/${summary.total}`, "件")}
       ${scoreCard("優先度", summary.prioAccuracy, "%")}
@@ -2282,63 +2505,6 @@
 
     renderReviewTable(summary.reviewRows);
     showScreen("result-screen");
-  }
-
-  function buildSummary(reason) {
-    const completed = state.chats.filter((chat) => chat.status === "completed");
-    const total = state.chats.length;
-    // 途中で終了した場合、まだ届いていなかったチャットの数（結果と CSV に残す）
-    const undelivered = state.level === 1 ? 0 : Math.max(0, state.pool.length - state.nextPoolIndex);
-    const prioAccuracy = percent(completed.filter((chat) => chat.isPrioCorrect).length, completed.length);
-    const replyAccuracy = percent(completed.filter((chat) => chat.isReplyCorrect).length, completed.length);
-    const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
-    const noReplyItems = completed.filter((chat) => !chat.requiresReply);
-    const noReplyAccuracy = percent(noReplyItems.filter((chat) => chat.isReplyCorrect).length, noReplyItems.length);
-    const phoneAccuracy = percent(state.phoneRecords.filter((phone) => phone.correct).length, state.phoneRecords.length);
-    const reviewRows = state.chats.filter((chat) => {
-      if (chat.status !== "completed") return true;
-      return !chat.isPrioCorrect || !chat.isReplyCorrect;
-    });
-    // 返信の誤りを内訳で見て、助言を実際の誤りに合わせる
-    const repliedToNoReply = completed.some((chat) => !chat.requiresReply && chat.selectedAction === "reply");
-    const skippedRequired = completed.some((chat) => chat.requiresReply && chat.selectedAction === "no_reply");
-    const wrongReplyText = completed.some((chat) => chat.requiresReply && chat.selectedAction === "reply" && !chat.isReplyCorrect);
-    // 完了件数が少なすぎるときは「安定しています」と断定しない
-    const enough = completed.length >= 3;
-
-    const strengths = [];
-    if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
-    if (enough && prioAccuracy !== null && prioAccuracy >= 80) strengths.push("優先度の判断が安定しています。");
-    if (enough && replyAccuracy !== null && replyAccuracy >= 80 && !(noReplyAccuracy !== null && noReplyAccuracy < 80)) strengths.push("返信する、返信しないの切り分けが安定しています。");
-    if (state.level === 3 && state.phoneRecords.length >= 2 && phoneAccuracy !== null && phoneAccuracy >= 80) strengths.push("電話割り込みの緊急度判断が安定しています。");
-    if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
-
-    const nextSteps = [];
-    if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);
-    if (state.chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
-    if (prioAccuracy !== null && prioAccuracy < 80) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
-    if (replyAccuracy !== null && replyAccuracy < 80) {
-      if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
-      if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
-      if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
-    } else if (noReplyAccuracy !== null && noReplyAccuracy < 80) {
-      nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
-    }
-    if (state.level === 3 && phoneAccuracy !== null && phoneAccuracy < 80) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
-    if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
-
-    return {
-      total,
-      completed: completed.length,
-      undelivered,
-      prioAccuracy,
-      replyAccuracy,
-      averageTotal,
-      phoneAccuracy,
-      strengths,
-      nextSteps,
-      reviewRows
-    };
   }
 
   function renderReviewTable(rows) {
@@ -2363,8 +2529,8 @@
             <tr>
               <td>${escapeHtml(chat.sender)}</td>
               <td>${escapeHtml(labels[chat.status])}</td>
-              <td>${escapeHtml(formatPriorityResult(chat))}</td>
-              <td>${escapeHtml(formatReplyResult(chat))}</td>
+              <td>${escapeHtml(Logic.priorityResultText(chat))}</td>
+              <td>${escapeHtml(Logic.replyResultText(chat))}</td>
               <td>${escapeHtml(chat.text)}</td>
             </tr>
           `).join("")}
@@ -2424,30 +2590,13 @@
   }
 
   function downloadCSV() {
-    const rows = [...state.chats].sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map(toCsvRow);
+    const session = { level: state.level, durationSec: state.durationSec, endReason: state.endReason, undelivered: undeliveredCount() };
+    const rows = [...state.chats].sort((a, b) => a.createdAt - b.createdAt || a.id - b.id).map((chat) => Logic.csvRow(chat, session));
     if (rows.length === 0) {
       showToast("出力するデータがありません。");
       return;
     }
-    const header = [
-      "レベル",
-      "状態",
-      "送信者",
-      "メッセージ内容",
-      "正解優先度",
-      "選択優先度",
-      "優先度正誤",
-      "返信必要",
-      "選択処理",
-      "返信正誤",
-      "確認時間(秒)",
-      "振り分け時間(秒)",
-      "返信時間(秒)",
-      "総処理時間(秒)",
-      "制限時間(分)",
-      "終了理由",
-      "未着件数"
-    ];
+    const header = Logic.csvHeader();
     const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -2465,89 +2614,23 @@
     URL.revokeObjectURL(url);
   }
 
-  function toCsvRow(chat) {
-    return [
-      `Level ${state.level}`,
-      labels[chat.status],
-      chat.sender,
-      chat.text,
-      labels[chat.correctPrio],
-      chat.selectedPrio ? labels[chat.selectedPrio] : "",
-      chat.isPrioCorrect === null ? "" : chat.isPrioCorrect ? "正解" : "不正解",
-      chat.requiresReply ? "必要" : "不要",
-      chat.selectedAction === "reply" ? "返信" : chat.selectedAction === "no_reply" ? "返信せず完了" : "",
-      chat.isReplyCorrect === null ? "" : chat.isReplyCorrect ? "正解" : "不正解",
-      chat.openedAt ? secondsBetween(chat.createdAt, chat.openedAt) : "",
-      chat.prioAt && chat.selectedPrio ? secondsBetween(chat.openedAt, chat.prioAt) : "",
-      chat.completedAt ? secondsBetween(chat.prioAt, chat.completedAt) : "",
-      chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : "",
-      state.level === 1 ? "" : String(Math.round(state.durationSec / 60)),
-      getEndReason(state.endReason),
-      state.level === 1 ? "0" : String(Math.max(0, state.pool.length - state.nextPoolIndex))
-    ];
-  }
-
-  function formatPriorityResult(chat) {
-    if (chat.status !== "completed") return `正解: ${labels[chat.correctPrio]}`;
-    return `${chat.isPrioCorrect ? "正解" : "不正解"} / 正解: ${labels[chat.correctPrio]} / 選択: ${labels[chat.selectedPrio]}`;
-  }
-
-  function formatReplyResult(chat) {
-    if (chat.status !== "completed") return chat.requiresReply ? "返信必要" : "返信不要";
-    return `${chat.isReplyCorrect ? "正解" : "不正解"} / ${chat.requiresReply ? "返信必要" : "返信不要"}`;
-  }
-
   function getActiveChat() {
     return state.chats.find((chat) => chat.id === state.activeId) || null;
   }
 
+  // お手本の色付け（Logic.targetMarks を HTML にする）
   function renderTarget(chat) {
-    const draft = normalize(chat.draft);
-    const target = normalize(chat.reply);
-    const matched = commonPrefixLength(draft, target);
-    const chars = Array.from(chat.reply);
-    let position = 0;
-    // 先頭からの一致分を緑、最初の誤りから入力済みの範囲を赤にする（位置が偶然合った文字を緑にしない）。
-    const body = chars.map((char) => {
-      if (/\s/.test(char)) return escapeHtml(char);
-      const index = position;
-      position += 1;
-      if (index < matched) return `<span class="typed">${escapeHtml(char)}</span>`;
-      if (index < draft.length) return `<span class="wrong">${escapeHtml(char)}</span>`;
-      return `<span>${escapeHtml(char)}</span>`;
+    const { marks, extra } = Logic.targetMarks(chat.draft, chat.reply);
+    const body = marks.map((mark) => {
+      if (mark.state === "space") return escapeHtml(mark.char);
+      if (mark.state === "plain") return `<span>${escapeHtml(mark.char)}</span>`;
+      return `<span class="${mark.state}">${escapeHtml(mark.char)}</span>`;
     }).join("");
-    // お手本より長く打った分は、消すべき文字として末尾に赤で示す。
-    const extra = draft.length > target.length ? `<span class="wrong">${escapeHtml(draft.slice(target.length))}</span>` : "";
-    return body + extra;
+    return body + (extra ? `<span class="wrong">${escapeHtml(extra)}</span>` : "");
   }
 
   function typingProgress(chat) {
-    const draft = normalize(chat.draft);
-    const target = normalize(chat.reply);
-    const matched = commonPrefixLength(draft, target);
-    const extra = Math.max(0, draft.length - target.length);
-    const done = draft === target && target.length > 0;
-    let percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
-    // 一致していないのに 100% と見せない
-    if (!done && percentValue === 100) percentValue = 99;
-    let feedback;
-    if (done) feedback = "入力が一致しました。送信できます。";
-    else if (matched === target.length && extra > 0) feedback = `文字が多すぎます。末尾の ${extra} 文字を消してください（一致 ${matched}/${target.length} 文字）`;
-    else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字。赤い文字の位置から直してください`;
-    else feedback = `一致 ${matched}/${target.length} 文字`;
-    return { percent: percentValue, done, feedback, matched, extra };
-  }
-
-  function commonPrefixLength(a, b) {
-    const max = Math.min(a.length, b.length);
-    let index = 0;
-    while (index < max && a[index] === b[index]) index += 1;
-    return index;
-  }
-
-  // 空白は無視する。IME の句読点設定が「，．」でも「、。」と同じ文字として扱う（お手本どおり打っても不一致になるのを防ぐ）。
-  function normalize(value) {
-    return String(value || "").replace(/\s+/g, "").replace(/，/g, "、").replace(/．/g, "。");
+    return Logic.typingProgress(chat.draft, chat.reply);
   }
 
   function escapeHtml(value) {
@@ -2564,50 +2647,10 @@
     return `"${text.replace(/"/g, '""')}"`;
   }
 
-  // 分母が0のときに 0% を返すと「全問不正解」に見えてしまうため null を返し、
-  // 表示側で「-」に置き換える。
-  function percent(numerator, denominator) {
-    if (!denominator) return null;
-    return Math.round((numerator / denominator) * 100);
-  }
-
-  // secondsBetween は toFixed で文字列を返すため、数値化してから平均を取る。
-  // 未計測の項目は空文字なので、Number("") が 0 になって平均を歪めないよう先に除外する。
-  function average(values) {
-    const valid = values
-      .filter((value) => value !== "" && value !== null && value !== undefined)
-      .map(Number)
-      .filter((value) => Number.isFinite(value));
-    if (!valid.length) return null;
-    return (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1);
-  }
-
-  // 集計できなかった値は「-」で表示する。
-  function formatStat(value) {
-    return value === null || value === undefined ? "-" : String(value);
-  }
-
-  function secondsBetween(start, end) {
-    if (!start || !end) return "";
-    return ((end - start) / 1000).toFixed(1);
-  }
-
-  function formatTime(totalSeconds) {
-    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
-    const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-    return `${minutes}:${seconds}`;
-  }
-
   function formatElapsed(timestamp) {
     const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
     if (seconds < 60) return `${seconds}秒前`;
     return `${Math.floor(seconds / 60)}分前`;
-  }
-
-  function getEndReason(reason) {
-    if (reason === "time") return "時間終了";
-    if (reason === "complete") return "全件完了";
-    return "手動終了";
   }
 
   function randomBetween(min, max) {

@@ -31,6 +31,25 @@ R.ok("AA-1", mismatch.length === 0, `判定ルールと食い違う問題: ${mis
 R.ok("AA-2", !all.some((d) => d.text.includes("返信不要") && d.req), "「返信不要」と書いてあるのに返信必要な問題が無い");
 R.ok("AA-3", data.L1.filter((d) => d.prio === "high").every((d) => /クレーム|ダウン|重要顧客|至急|本日/.test(d.text)), "Level1 の「高」は本文に至急の根拠がある");
 
+R.section("原則 問題データの正解が規則表（仕様書 §11）から導ける");
+{
+  const T = require("./ref/answer-table");
+  const rows = data.L1.map((d) => ({ ...d, level: 1 })).concat(data.TY.map((d) => ({ ...d, level: 2 })));
+  const missing = rows.filter((d) => !T.ATTRIBUTES.find((a) => a.level === d.level && a.sender === d.sender));
+  R.ok("P-1", missing.length === 0, `属性表に無い問題: ${missing.length}件 ${missing.map((d) => d.sender).join(",")}`);
+  const extra = T.ATTRIBUTES.filter((a) => !rows.find((d) => d.level === a.level && d.sender === a.sender));
+  R.ok("P-2", extra.length === 0, `本体に無い属性行: ${extra.length}件 ${extra.map((a) => a.sender).join(",")}`);
+  const prioMismatch = rows.filter((d) => { const a = T.ATTRIBUTES.find((x) => x.level === d.level && x.sender === d.sender); return a && T.derivePriority(a) !== d.prio; });
+  R.ok("P-3", prioMismatch.length === 0, `規則表から導いた優先度と正解表が食い違う問題: ${prioMismatch.length}件 ${prioMismatch.map((d) => `${d.sender}(表:${T.derivePriority(T.ATTRIBUTES.find((x) => x.level === d.level && x.sender === d.sender))}/本体:${d.prio})`).join(",")}`);
+  const replyMismatch = rows.filter((d) => { const a = T.ATTRIBUTES.find((x) => x.level === d.level && x.sender === d.sender); return a && T.deriveRequiresReply(a) !== d.req; });
+  R.ok("P-4", replyMismatch.length === 0, `規則表から導いた返信要否と正解表が食い違う問題: ${replyMismatch.length}件 ${replyMismatch.map((d) => d.sender).join(",")}`);
+  // 属性と本文の整合（属性が本文から読み取れること）
+  const markBad = rows.filter((d) => { const a = T.ATTRIBUTES.find((x) => x.level === d.level && x.sender === d.sender); return a && a.noReplyMark !== d.text.includes("返信不要"); });
+  R.ok("P-5", markBad.length === 0, `「返信不要」表記の属性が本文と食い違う問題: ${markBad.length}件 ${markBad.map((d) => d.sender).join(",")}`);
+  const phoneBad = data.PHONE.filter((p) => { const a = T.PHONE_ATTRIBUTES.find((x) => x.caller === p.caller); return !a || a.isEmergency !== p.isEmergency; });
+  R.ok("P-6", phoneBad.length === 0 && data.PHONE.length === T.PHONE_ATTRIBUTES.length, `電話の緊急性が属性表と食い違う: ${phoneBad.length}件`);
+}
+
 R.section("CP 表示名の一意性");
 for (const [name, rows] of [["L1", data.L1], ["TY", data.TY]]) {
   const c = {}; rows.forEach((d) => { c[d.sender] = (c[d.sender] || 0) + 1; });

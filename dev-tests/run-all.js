@@ -1,5 +1,5 @@
 // 恒久検査スイート 一括実行
-//   node run-all.js            … 全スイート（約40分）
+//   node run-all.js            … 全スイート（約60分）。変異検査は別途 node mutate.js
 //   QUICK=1 node run-all.js    … 長時間スイート（判定マトリクス・模擬プレイ・ゲームQA）を除く（約6分）
 //   ONLY=e2e03,e2e07 node run-all.js
 "use strict";
@@ -8,7 +8,9 @@ const fs = require("fs");
 const path = require("path");
 
 const SUITES = [
-  ["e2e07_data",        "データ整合（正解表・判別可能性・一意性）",        "fast"],
+  ["e2e07_data",        "データ整合（正解表・判別可能性・規則表からの導出・一意性）", "fast"],
+  ["diff-check",        "差分検査（本体 Logic × 参照実装2本、乱数 10,000 セッション）", "fast"],
+  ["golden",            "ゴールデン回帰（固定入力 3,000 セッションの出力指紋）",     "fast"],
   ["e2e03_softlock",    "進行不能探索（無作為操作×解決可能性オラクル）",    "fast"],
   ["e2e05_adversarial", "敵対的（連打・二重起動・悪意入力・破損データ）",   "fast"],
   ["e2e06_symmetry",    "対称性スイープ",                                  "fast"],
@@ -29,6 +31,7 @@ for (const [name, desc, kind] of SUITES) {
   const t0 = Date.now();
   const r = spawnSync(process.execPath, [path.join(__dirname, name + ".js")], { stdio: "inherit", env: process.env });
   results.push({ name, desc, code: r.status, sec: Math.round((Date.now() - t0) / 1000) });
+  console.log("");
 }
 
 console.log("\n==================== 検査結果 ====================");
