@@ -310,11 +310,11 @@ ONLY=e2e03,e2e07 node run-all.js
 | e2e05_adversarial | 敵対的 | 24/24 | 0 | PASS |
 | e2e06_symmetry | 対称性スイープ | 13/13 | 0 | PASS |
 | e2e10_audit | 監査で確認した不具合の再発防止（＋変異検査・レビューで補強した 16 項目） | 73/73 | 0 | PASS |
-| e2e02_ideal | 理想プレイ | __E2E02__ | 0 | __P02__ |
-| e2e04_gameqa | ゲームQA手法10種 | __E2E04__ | 0 | __P04__ |
+| e2e02_ideal | 理想プレイ | 14/14 | 0 | PASS |
+| e2e04_gameqa | ゲームQA手法10種 | 26/26 | 0 | PASS |
 | e2e01_playthrough | 模擬プレイスルー（CSV の受信順を実際に照合） | __E2E01__ | 0 | __P01__ |
-| e2e08_judgment | 判定マトリクス総当たり | __E2E08__ | 0 | __P08__ |
-| e2e09_humanpace | 人間速度プレイ | __E2E09__ | 0 | __P09__ |
+| e2e08_judgment | 判定マトリクス総当たり | 15/15 | 0 | PASS |
+| e2e09_humanpace | 人間速度プレイ | 11/11 | 0 | PASS |
 
 ### 7-2. 検査体系そのものへの独立レビューで直したこと
 

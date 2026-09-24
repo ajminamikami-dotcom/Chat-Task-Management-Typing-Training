@@ -108,10 +108,10 @@ function recompute(rows) {
     R.ok(`BE-L${level}`, csv.rows.filter((r) => r["状態"] !== "処理済").every((r) => r["優先度正誤"] === "" && r["返信正誤"] === ""), "未完了の行に正誤が付いていない");
     R.ok(`AJ-L${level}`, [rc.prio, rc.reply].every((v) => v === "-" || (Number(v) >= 0 && Number(v) <= 100)), "スコアが定義域内");
     {
-      // 受信トレイは新着が先頭（新しい順）なので、CSV はその逆順（受信順）になっているはず
-      const inboxOrder = await page.evaluate(() => Array.from(document.querySelectorAll("#chat-list .chat-item .sender")).map((e) => e.textContent));
+      // 受信順 = チャット番号（data-chat-id）の昇順。受信トレイは Level 2/3 では新着が先頭なので、並べ替えが無ければ食い違う
+      const arrivalOrder = await page.evaluate(() => Array.from(document.querySelectorAll("#chat-list .chat-item")).sort((a, b) => Number(a.dataset.chatId) - Number(b.dataset.chatId)).map((e) => e.querySelector(".sender").textContent));
       const csvOrder = csv.rows.map((r) => r["送信者"]);
-      R.ok(`AI-L${level}`, JSON.stringify(csvOrder) === JSON.stringify(inboxOrder.slice().reverse()), `CSV が受信順（受信トレイの逆順と一致: ${csvOrder.length} 行）`);
+      R.ok(`AI-L${level}`, JSON.stringify(csvOrder) === JSON.stringify(arrivalOrder), `CSV が受信順（チャット番号順と一致: ${csvOrder.length} 行）`);
     }
 
     // ---- Level 3: 電話判断の独立再計算（要件AX/E） ----
