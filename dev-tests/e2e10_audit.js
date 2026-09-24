@@ -69,6 +69,7 @@ async function holdEnter(page, times = 6) {
   await start(page, 2, 600);
   let a = await openReplyChat(page, data, 2);
   await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);
+  R.ok("K-初期無効", (await page.locator(sel.submit).getAttribute("aria-disabled")) === "true", "何も打っていない直後の送信ボタンは無効表示");
   await page.locator(sel.input).fill(a.reply + "。"); await page.waitForTimeout(80);
   {
     const fb = await page.locator("#typing-feedback").innerText();
@@ -114,6 +115,7 @@ async function holdEnter(page, times = 6) {
   // 元のチャット（保留）を開き直して 30ms 後に Enter
   const pendingIdx = await page.evaluate(() => Array.from(document.querySelectorAll("#chat-list .chat-item")).findIndex((e) => /保留/.test(e.textContent)));
   await page.locator(sel.chatItems).nth(pendingIdx).click(); await page.waitForTimeout(30);
+  R.ok("K-開き直し有効", (await page.locator(sel.submit).getAttribute("aria-disabled")) === "false", "一致済みの下書きで開き直すと送信ボタンは有効表示");
   c0 = await counters(page);
   await page.keyboard.press("Enter"); await page.waitForTimeout(150);
   R.ok("K-再選択Enter", (await counters(page)).completed === c0.completed + 1, "開き直した直後 0.4 秒以内でも Enter 送信が無視されない（キー操作にガードを掛けない）");
@@ -253,6 +255,26 @@ async function holdEnter(page, times = 6) {
     // 無視後のフォーカス復帰（#16 系）：入力欄へ戻る
     if (await p2.locator(sel.phone).count()) await dismissPhone(p2, false);
     R.ok("AD-無視復帰", (await active(p2)) === "typing-input", "無視した後は入力欄に戻る");
+  }
+  // #43 の経路そのもの: 着信前のフォーカスが「返信せずに完了」→「無視する」を Enter 長押し → リピートが復帰先を押さない
+  {
+    await p2.locator(sel.noReply).focus();
+    R.ok("AX-着信b", await waitPhone(p2), "着信（長押し検査用）");
+    await p2.waitForTimeout(600);
+    await p2.locator(sel.ignore).focus();
+    const c1 = await counters(p2);
+    await holdEnter(p2, 8); await p2.waitForTimeout(250);
+    R.ok("L-長押し2", (await counters(p2)).completed === c1.completed && (await p2.locator(sel.phone).count()) === 0, "復帰先が「返信せずに完了」でも Enter 長押しで完了にならない");
+    // 「再開」の Enter 長押し → 再開後に入力欄へ戻ったリピート Enter が下書きを送信しない
+    const b = findAnswer(data, await activeChatBody(p2), 3);
+    if (b && b.req) {
+      await p2.locator(sel.input).fill(b.reply); await p2.waitForTimeout(80);
+      await p2.click(sel.pause); await p2.waitForTimeout(150);
+      const c2 = await counters(p2);
+      await p2.locator(sel.resume).focus();
+      await holdEnter(p2, 8); await p2.waitForTimeout(250);
+      R.ok("L-長押し3", (await counters(p2)).completed === c2.completed && (await p2.locator("#pause-overlay.show").count()) === 0, "「再開」を Enter 長押ししても、再開後のリピート Enter で下書きが送信されない");
+    }
   }
   // 応答後のフォーカス（#15）／閉じた直後のダブルクリック（#41）
   R.ok("AX-次の着信", await waitPhone(p2), "次の着信が来る");

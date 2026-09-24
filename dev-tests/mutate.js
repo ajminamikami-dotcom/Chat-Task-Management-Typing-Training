@@ -79,7 +79,7 @@ const UI_MUTANTS = [
   ["U02", "同じ位置の再クリックガードを外す", "const SAME_SPOT_MS = 700;", "const SAME_SPOT_MS = 0;"],
   ["U03", "着信直後のキー締め出しを外す", "const KEY_SETTLE_MS = 500;", "const KEY_SETTLE_MS = 0;"],
   ["U04", "キー長押しのリピートを通す", 'if (event.repeat && (event.key === "Enter" || event.key === " " || event.key === "Escape")) {', "if (false) {"],
-  ["U05", "表示中の着信を上書きする", "if (state.gameOver || state.paused || state.currentPhone) return;", "if (state.gameOver || state.paused) return;"],
+  ["U05", "表示中の着信を上書きする（等価: 現在の予約経路では表示中に showPhone は呼ばれない。多重防御）", "if (state.gameOver || state.paused || state.currentPhone) return;", "if (state.gameOver || state.paused) return;"],
   ["U06", "再開時に新着を固定 1.5 秒で張り直す", "if (state.chatLeft !== null) scheduleNextChat(Math.max(1500, state.chatLeft));", "scheduleNextChat(1500);"],
   ["U07", "停止時間を処理時間から除かない", "state.chats.forEach((chat) => {\n          if (chat.status === \"completed\") return;", "state.chats.forEach((chat) => {\n          return;"],
   ["U08", "終了ボタンを確認なしにする", 'els.finishBtn.addEventListener("click", openFinishConfirm);', 'els.finishBtn.addEventListener("click", () => endGame("manual"));'],
