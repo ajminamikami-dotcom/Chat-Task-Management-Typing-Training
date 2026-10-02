@@ -372,7 +372,7 @@ async function holdEnter(page, times = 6) {
   // ---------------------------------------------------------------- 未着が残る間は全件完了で終了しない／Level 1 の Alt+数字
   R.section("AF 未着が残る間は手持ちゼロでも終了しない／Level 1 のキーボード経路");
   {
-    const f3 = await open({ html: fastHtml(60000, 6000) });
+    const f3 = await open({ html: fastHtml(60000, 15000) });   // 新着は 15 秒ごと（4 件を処理し終える前に届かないように）
     const p5 = f3.page;
     await start(p5, 2, 600);
     // 優先度をマウスで押した直後でも、受信トレイの別チャットのクリックは通る（門番の scope）
@@ -388,7 +388,8 @@ async function holdEnter(page, times = 6) {
     for (let i = 0; i < 4; i++) { const r = await require("./_lib").solveOne(p5, data, "ideal"); if (r === false) break; }
     await p5.waitForTimeout(400);
     R.ok("AF-未着待ち", (await p5.locator(sel.result).count()) === 0 && (await p5.locator(sel.openChats).count()) === 0, "初期4件を処理しても未着が残る間は結果画面に行かない");
-    await p5.waitForTimeout(6500);
+    const tWait = Date.now();
+    while (Date.now() - tWait < 20000 && !(await p5.locator(sel.openChats).count())) await p5.waitForTimeout(250);
     R.ok("AF-次の新着", (await p5.locator(sel.openChats).count()) >= 1, "そのまま待てば次の新着が届く");
     await finish(p5); await p5.click(sel.menu);
     await start(p5, 1);
