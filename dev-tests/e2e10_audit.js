@@ -337,8 +337,14 @@ async function holdEnter(page, times = 6) {
     await p2.waitForTimeout(600);
     const ib = await p2.locator(sel.ignore).boundingBox();
     const c1 = await counters(p2);
-    await p2.mouse.dblclick(ib.x + ib.width / 2, ib.y + ib.height / 2); await p2.waitForTimeout(200);
+    await p2.mouse.dblclick(ib.x + ib.width / 2, ib.y + ib.height / 2); await p2.waitForTimeout(60);
+    // 閉じた直後（0.4 秒以内）の「優先度を選び直す」クリックも捨てられる（門番の対象）
+    const badgeBefore = await p2.locator("#chat-status-badge").innerText();
+    const rb = await p2.locator(sel.redo).boundingBox();
+    if (rb) { await p2.mouse.click(rb.x + rb.width / 2, rb.y + rb.height / 2); await p2.waitForTimeout(120); }
     R.ok("L-無視連打", (await counters(p2)).completed === c1.completed && (await p2.locator(sel.phone).count()) === 0, "「無視する」のダブルクリックで背面の完了ボタンが押されない");
+    R.ok("L-閉じた直後の選び直し", (await p2.locator("#chat-status-badge").innerText()) === badgeBefore, `着信画面を閉じた直後の「優先度を選び直す」クリックは捨てられる（${badgeBefore} のまま）`);
+    await p2.waitForTimeout(400);
   }
   // 未処理のチャットを開いた状態で着信を待ち、着信中の Alt+数字 が背面に届かないことを確かめる
   {

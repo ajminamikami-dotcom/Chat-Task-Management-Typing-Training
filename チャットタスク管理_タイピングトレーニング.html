@@ -2162,8 +2162,9 @@
   }
 
   // 優先度の選び直し。入力途中の下書きと最初の判断時刻は保持する。
-  function reopenPriority() {
+  function reopenPriority(event) {
     if (state.gameOver || state.paused) return;
+    if (!accepts(event)) return;
     const chat = getActiveChat();
     if (!chat || chat.status === "completed") return;
     chat.status = "unread";
@@ -2224,7 +2225,7 @@
         }, event));
       });
       els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", (event) => finishChat({ action: "no_reply", selectedReply: "" }, event));
-      els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
+      els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", (event) => reopenPriority(event));
       return;
     }
 
@@ -2303,7 +2304,7 @@
       resetNoReplyConfirm();
       finishChat({ action: "no_reply", selectedReply: "" }, event);
     });
-    els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", reopenPriority);
+    els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", (event) => reopenPriority(event));
     focusTypingInput(true);
   }
 

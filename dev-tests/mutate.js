@@ -118,6 +118,7 @@ const UI_MUTANTS = [
   ["U25", "未着が残っていても手持ちゼロで終了", "} else if (state.level !== 1 && allDone && state.nextPoolIndex >= state.pool.length) {", "} else if (state.level !== 1 && allDone) {"],
   ["U26", "Level 1 で Alt+数字のあと選択肢へフォーカスを移さない", "if (first && !pointer) first.focus();", "if (false) first.focus();"],
   ["U27", "優先度クリック直後に受信トレイのクリックも捨てる（scope 無視）", '&& !(area === "inbox" && gate.scope === "panel")) return false;', ") return false;"],
+  ["U28", "「優先度を選び直す」が門番を通らない", "  function reopenPriority(event) {\n    if (state.gameOver || state.paused) return;\n    if (!accepts(event)) return;", "  function reopenPriority(event) {\n    if (state.gameOver || state.paused) return;"],
 ];
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctt-mut-"));
