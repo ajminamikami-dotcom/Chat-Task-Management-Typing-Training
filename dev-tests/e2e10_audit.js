@@ -53,7 +53,7 @@ async function holdEnter(page, times = 6) {
   {
     const rules = await page.locator("[aria-labelledby='criteria-title']").innerText();
     R.ok("AA-中", rules.includes("会議・予定の変更"), "判定基準の「中」に会議・予定の変更がある（A社・田中部長の中が導ける）");
-    R.ok("AA-低", rules.includes("急ぎではない"), "判定基準の「低」に『急ぎではない』と書かれた軽い依頼がある");
+    R.ok("AA-低", rules.includes("急ぎではありません"), "判定基準の「低」に『急ぎではありません』と書かれた軽い依頼がある");
     R.ok("AA-返信", rules.includes("内容が情報共有でも返信"), "個人からの声かけは情報共有でも返信する、と明記");
     R.ok("AA-電話", rules.includes("営業の電話や誘いの電話は無視"), "電話の判定基準が画面にある");
     const t = (s) => data.L1.concat(data.TY).find((d) => d.sender === s).text;
@@ -101,7 +101,7 @@ async function holdEnter(page, times = 6) {
     await page.locator(sel.input).focus(); await page.keyboard.press("Escape"); await page.waitForTimeout(80);
     R.ok("K-入力欄Esc", (await page.locator("#pause-overlay.show").count()) === 0, "入力欄の Esc は一時停止にならない");
     // マウスで優先度を押した直後（0.4 秒以内）でも Enter 送信は受け付ける（原則 5）
-    await page.click(sel.redo); await page.waitForTimeout(100);
+    await page.click(sel.redo); await page.waitForTimeout(450);   // 選び直した直後 0.4 秒はパネル内のクリックを受け付けない仕様
     const box = await page.locator(sel.prio(a.prio)).boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(60);
     await page.locator(sel.input).fill(a.reply); const cK = await counters(page);
@@ -123,7 +123,8 @@ async function holdEnter(page, times = 6) {
   R.ok("L-返信せず1", (await counters(page)).completed === c0.completed && /もう一度/.test(await page.locator(sel.noReply).innerText()), "下書きがあるときの「返信せずに完了」は1回では確定しない");
   await page.locator(sel.input).type("あ"); await page.waitForTimeout(60);
   R.ok("L-返信せず解除", (await page.locator(sel.noReply).innerText()) === "返信せずに完了", "入力を続けると確認状態が解除される");
-  await page.click(sel.noReply); await page.waitForTimeout(80); await page.click(sel.noReply); await page.waitForTimeout(120);
+  await page.waitForTimeout(700);   // 確認に切り替わった直後 0.7 秒の同じ位置のクリックは捨てられる仕様（人間と同じく少し待つ）
+  await page.click(sel.noReply); await page.waitForTimeout(750); await page.click(sel.noReply); await page.waitForTimeout(120);
   R.ok("L-返信せず2", (await counters(page)).completed === c0.completed + 1, "2回押せば完了できる（意図した操作は妨げない）");
 
   // ---------------------------------------------------------------- 再選択直後の Enter（#9）・完了後のフォーカス（#23）
@@ -198,7 +199,7 @@ async function holdEnter(page, times = 6) {
   a = await openReplyChat(page, data, 2);
   await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);
   await page.locator(sel.input).fill(a.reply); await page.waitForTimeout(1200);
-  await page.click(sel.redo); await page.waitForTimeout(100); await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);
+  await page.click(sel.redo); await page.waitForTimeout(450); await page.click(sel.prio(a.prio)); await page.waitForTimeout(800);   // 選び直した直後 0.4 秒はパネル内のクリックを受け付けない仕様
   await page.keyboard.press("Enter"); await page.waitForTimeout(120);
   const expectUndelivered = data.TY.length - (await page.locator(sel.chatItems).count());   // 届いた件数はタイミングで変わる
   await finishNow(page); await page.waitForSelector(sel.result);
@@ -244,7 +245,7 @@ async function holdEnter(page, times = 6) {
   await start(page, 3, 900);
   {
     const items0 = await page.locator(sel.chatItems).count();
-    for (let i = 0; i < 5; i++) { await page.click(sel.pause); await page.waitForTimeout(150); await page.click(sel.resume); await page.waitForTimeout(150); }
+    for (let i = 0; i < 5; i++) { await page.click(sel.pause); await page.waitForTimeout(450); await page.click(sel.resume); await page.waitForTimeout(450); }   // 停止画面が出た直後 0.4 秒は「再開」のクリックを受け付けない仕様
     await page.waitForTimeout(3500);
     R.ok("V-停止連打", (await page.locator(sel.chatItems).count()) === items0 && (await page.locator(sel.phone).count()) === 0, "停止→再開を5回繰り返しても直後に新着・着信が来ない");
     // 停止時間の除外
@@ -297,7 +298,7 @@ async function holdEnter(page, times = 6) {
     // 着信中に一時停止ボタン → 再開しても相手が変わらない（#1）、再開ダブルクリックで判定が落ちない（#42）
     await p2.waitForTimeout(600);
     const who = await p2.locator("#caller-name").innerText();
-    await p2.click(sel.phonePause); await p2.waitForTimeout(150);
+    await p2.click(sel.phonePause); await p2.waitForTimeout(450);   // 停止画面が出た直後 0.4 秒は「再開」のクリックを受け付けない仕様
     R.ok("O-着信中停止", (await p2.locator("#pause-overlay.show").count()) === 1 && (await p2.locator(sel.phone).count()) === 0, "着信画面のボタンで一時停止できる");
     const rb = await p2.locator(sel.resume).boundingBox();
     await p2.mouse.dblclick(rb.x + rb.width / 2 - 15, rb.y + rb.height / 2); await p2.waitForTimeout(2600);
@@ -343,7 +344,8 @@ async function holdEnter(page, times = 6) {
     const rb = await p2.locator(sel.redo).boundingBox();
     if (rb) { await p2.mouse.click(rb.x + rb.width / 2, rb.y + rb.height / 2); await p2.waitForTimeout(120); }
     R.ok("L-無視連打", (await counters(p2)).completed === c1.completed && (await p2.locator(sel.phone).count()) === 0, "「無視する」のダブルクリックで背面の完了ボタンが押されない");
-    R.ok("L-閉じた直後の選び直し", (await p2.locator("#chat-status-badge").innerText()) === badgeBefore, `着信画面を閉じた直後の「優先度を選び直す」クリックは捨てられる（${badgeBefore} のまま）`);
+    // 保留中（優先度を選んだ後）のチャットで、ボタンが実際にあることも条件に含める（空振りで合格にならないように）
+    R.ok("L-閉じた直後の選び直し", badgeBefore.startsWith("保留") && !!rb && (await p2.locator("#chat-status-badge").innerText()) === badgeBefore, `着信画面を閉じた直後の「優先度を選び直す」クリックは捨てられる（${badgeBefore} のまま）`);
     await p2.waitForTimeout(400);
   }
   // 未処理のチャットを開いた状態で着信を待ち、着信中の Alt+数字 が背面に届かないことを確かめる
@@ -423,7 +425,7 @@ async function holdEnter(page, times = 6) {
     await dismissPhone(p3, false);
     // 幅 1024（単一列）で「再開」をダブルクリックしても、2回目が受信トレイに落ちて別チャットに切り替わらない
     const headingBefore = await p3.locator("#chat-heading").innerText();
-    await p3.click(sel.pause); await p3.waitForTimeout(150);
+    await p3.click(sel.pause); await p3.waitForTimeout(450);   // 停止画面が出た直後 0.4 秒は「再開」のクリックを受け付けない仕様
     const rb = await p3.locator(sel.resume).boundingBox();
     await p3.mouse.dblclick(rb.x + rb.width / 2, rb.y + rb.height / 2); await p3.waitForTimeout(200);
     R.ok("L-再開2回", (await p3.locator("#pause-overlay.show").count()) === 0 && (await p3.locator("#chat-heading").innerText()) === headingBefore, "再開のダブルクリックで処理中のチャットが別チャットに切り替わらない");
@@ -442,7 +444,7 @@ async function holdEnter(page, times = 6) {
     const vis = await p4.evaluate(() => ["submit-reply-btn", "no-reply-btn", "typing-feedback"].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
     R.ok("AE-ゆったり", vis, "1280×720 のゆったり表示で送信・完了ボタンと一致表示が画面内にある");
     // 返信必要の課題を誤った優先度で「返信せずに完了」→ 要確認タスクの表がある結果画面を作る
-    await p4.click(sel.redo); await p4.waitForTimeout(100);
+    await p4.click(sel.redo); await p4.waitForTimeout(450);   // 選び直した直後 0.4 秒はパネル内のクリックを受け付けない仕様
     await p4.click(sel.prio(c.prio === "high" ? "low" : "high")); await p4.waitForTimeout(800);
     await clickNoReply(p4);
     await finish(p4);
@@ -451,6 +453,100 @@ async function holdEnter(page, times = 6) {
     await p4.evaluate(() => document.body.classList.remove("comfortable"));
     b3.errors.forEach((e) => errors.push(e));
     await b3.browser.close();
+  }
+
+  // ---------------------------------------------------------------- 門番の一本化の検証（V10・独立レビューの所見）
+  R.section("G 門番の一本化（選び直し・別チャット・締め出しの解除・停止/再開・確認の二度押し）");
+  {
+    // ゆったり表示 + Level 1 では「優先度を選び直す」の真下に「低」が来る（レビュー所見 1）
+    const g1 = await open({ viewport: { width: 1280, height: 720 } });
+    const q = g1.page;
+    await q.click(sel.comfortable(true)); await start(q, 1, 300);
+    await q.locator(sel.openChats).first().click(); await q.waitForTimeout(120);
+    await q.click(sel.prio("high")); await q.waitForTimeout(750);
+    const rb = await q.locator(sel.redo).boundingBox();
+    await q.mouse.dblclick(rb.x + rb.width / 2, rb.y + rb.height / 2); await q.waitForTimeout(150);
+    const b1 = await q.locator("#chat-status-badge").innerText();
+    R.ok("G-選び直し2回", b1 === "未処理", `ゆったり表示で「優先度を選び直す」をダブルクリックしても 2 回目が「低」に落ちない（${b1}）`);
+    // 規則そのもの: 選び直した直後 0.4 秒のパネル内クリックは捨てられ、過ぎれば受け付ける
+    await q.waitForTimeout(750);
+    await q.click(sel.prio("high")); await q.waitForTimeout(750);
+    const rb2 = await q.locator(sel.redo).boundingBox();
+    await q.mouse.click(rb2.x + rb2.width / 2, rb2.y + rb2.height / 2); await q.waitForTimeout(40);
+    const low = await q.locator(sel.prio("low")).boundingBox();
+    await q.mouse.click(low.x + low.width / 2, low.y + low.height / 2); await q.waitForTimeout(120);
+    R.ok("G-選び直し直後", (await q.locator("#chat-status-badge").innerText()) === "未処理", "選び直した直後 0.4 秒以内の優先度クリックは捨てられる");
+    await q.waitForTimeout(450);
+    await q.mouse.click(low.x + low.width / 2, low.y + low.height / 2); await q.waitForTimeout(120);
+    R.ok("G-選び直し後", (await q.locator("#chat-status-badge").innerText()) === "保留 低", "0.4 秒を過ぎれば優先度を受け付ける");
+    // 優先度クリック → 受信トレイで別チャット → その優先度、を 0.4 秒以内に行っても 3 回目が捨てられない（所見 2）
+    // （標準表示で行う。ゆったり表示 1280×720 では返信パネルが受信トレイの下側に重なり、別チャットの位置が変わる）
+    await q.evaluate(() => document.body.classList.remove("comfortable"));
+    await q.waitForTimeout(750);
+    await q.locator("#chat-list .chat-item.unread").first().click(); await q.waitForTimeout(120);
+    const hi = await q.locator(sel.prio("high")).boundingBox();
+    const mid = await q.locator(sel.prio("mid")).boundingBox();
+    const bItem = await q.locator("#chat-list .chat-item.unread:not(.active)").first().boundingBox();
+    await q.mouse.click(hi.x + hi.width / 2, hi.y + hi.height / 2); await q.waitForTimeout(60);
+    await q.mouse.click(bItem.x + bItem.width / 2, bItem.y + bItem.height / 2); await q.waitForTimeout(60);
+    await q.mouse.click(mid.x + mid.width / 2, mid.y + mid.height / 2); await q.waitForTimeout(120);
+    const b3 = await q.locator("#chat-status-badge").innerText();
+    R.ok("G-別チャット", b3 === "保留 中", `優先度→別チャット→その優先度を 0.4 秒以内に行っても 3 回目を受け付ける（${b3}）`);
+    // 下書きがあるときの「返信せずに完了」の確認は、ダブルクリックで突破されない（Level 2）
+    await finishNow(q); await q.click(sel.menu); await start(q, 2, 300);
+    const c = await openReplyChat(q, data, 2);
+    await q.click(sel.prio(c.prio)); await q.waitForTimeout(500);
+    await q.locator(sel.input).fill(c.reply.slice(0, 3)); await q.waitForTimeout(80);
+    const c0 = await counters(q);
+    const nb = await q.locator(sel.noReply).boundingBox();
+    await q.mouse.dblclick(nb.x + nb.width / 2, nb.y + nb.height / 2); await q.waitForTimeout(150);
+    R.ok("G-確認2回", (await counters(q)).completed === c0.completed && (await q.locator('#no-reply-btn[data-confirm="1"]').count()) === 1, "下書きがあるときの「返信せずに完了」をダブルクリックしても確認を突破して完了にならない");
+    await q.waitForTimeout(750);
+    await q.mouse.click(nb.x + nb.width / 2, nb.y + nb.height / 2); await q.waitForTimeout(150);
+    R.ok("G-確認後", (await counters(q)).completed === c0.completed + 1, "確認表示から 0.7 秒を過ぎたクリックで完了できる");
+    g1.errors.forEach((e) => errors.push(e));
+    await g1.browser.close();
+  }
+  {
+    const g2 = await open({ html: fastHtml(1500, 4000) });
+    const r = g2.page;
+    await start(r, 3, 300);
+    await r.locator(sel.openChats).first().click(); await r.waitForTimeout(120);
+    // 着信画面が出た時刻を画面側で記録する（検査側の検知遅れに左右されないように）
+    await r.evaluate(() => { window.__phoneAt = 0; new MutationObserver(() => { if (document.getElementById("phone-modal").classList.contains("show")) window.__phoneAt = window.__phoneAt || Date.now(); }).observe(document.getElementById("phone-modal"), { attributes: true, attributeFilter: ["class"] }); });
+    R.ok("G-着信", await waitPhone(r), "着信が来る");
+    {
+      // 表示から 0.4 秒を少し過ぎた時点でマウスで「無視する」→ すぐ Alt+1。締め出し（表示から 0.5 秒）は画面が閉じた時点で解けている（所見 3）
+      await r.evaluate(() => new Promise((done) => { const tick = () => (Date.now() - window.__phoneAt >= 405 ? done() : setTimeout(tick, 5)); tick(); }));
+      const ib = await r.locator(sel.ignore).boundingBox();
+      await r.mouse.click(ib.x + ib.width / 2, ib.y + ib.height / 2);
+      await r.keyboard.press("Alt+Digit1"); await r.waitForTimeout(150);
+      const closed = (await r.locator(sel.phone).count()) === 0;
+      const b4 = await r.locator("#chat-status-badge").innerText();
+      R.ok("G-締め出し解除", closed && b4 === "保留 高", `着信画面を閉じた直後の Alt+1 は受け付ける（閉じた: ${closed} / ${b4}）`);
+      await r.waitForTimeout(450);
+    }
+    R.ok("G-着信2", await waitPhone(r), "次の着信が来る");
+    {
+      await r.waitForTimeout(600);
+      // 着信画面の「一時停止」→ 直後の「再開」クリックは捨てられる（所見 4: 2 つのボタンは位置が重なる）
+      await r.click(sel.phonePause); await r.waitForTimeout(40);
+      const rsb = await r.locator(sel.resume).boundingBox();
+      await r.mouse.click(rsb.x + rsb.width / 2, rsb.y + rsb.height / 2); await r.waitForTimeout(120);
+      R.ok("G-停止直後の再開", (await r.locator("#pause-overlay.show").count()) === 1, "停止画面が出た直後 0.4 秒の「再開」クリックは捨てられる（着信画面「一時停止」のダブルクリック対策）");
+      await r.waitForTimeout(450);
+      await r.mouse.click(rsb.x + rsb.width / 2, rsb.y + rsb.height / 2); await r.waitForTimeout(40);
+      const pb = await r.locator(sel.phonePause).boundingBox();
+      await r.mouse.click(pb.x + pb.width / 2, pb.y + pb.height / 2); await r.waitForTimeout(120);
+      R.ok("G-再開直後の停止", (await r.locator("#pause-overlay.show").count()) === 0 && (await r.locator(sel.phone).count()) === 1, "再開した直後 0.4 秒の着信画面「一時停止」クリックは捨てられる（「再開」のダブルクリック対策）");
+      await r.waitForTimeout(450);
+      await r.mouse.click(pb.x + pb.width / 2, pb.y + pb.height / 2); await r.waitForTimeout(120);
+      R.ok("G-停止", (await r.locator("#pause-overlay.show").count()) === 1, "0.4 秒を過ぎれば着信画面からも一時停止できる");
+      await r.keyboard.press("Escape"); await r.waitForTimeout(120);
+      R.ok("G-Esc再開", (await r.locator("#pause-overlay.show").count()) === 0 && (await r.locator(sel.phone).count()) === 1, "停止直後でもキーボード（Esc）の再開は常に受け付け、着信画面が戻る");
+    }
+    g2.errors.forEach((e) => errors.push(e));
+    await g2.browser.close();
   }
 
   R.ok("JS", errors.length === 0, `JSエラー ${errors.length} 件 ${errors.slice(0, 3).join(" | ")}`);

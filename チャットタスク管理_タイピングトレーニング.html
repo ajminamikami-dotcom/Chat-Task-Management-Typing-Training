@@ -157,6 +157,14 @@
     gap: 12px;
   }
 
+  .rule-note {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
   .rule-row {
     display: grid;
     grid-template-columns: 92px 1fr;
@@ -1061,21 +1069,22 @@
           <h2 id="criteria-title">判定基準</h2>
         </div>
         <div class="panel-body rule-grid">
+          <div class="rule-note">上から順に見て、最初に当てはまる区分にします。「返信不要」とあっても、予定の変更や対応事項があれば「中」です。</div>
           <div class="rule-row">
             <span class="badge high">高</span>
             <div><strong>至急対応。</strong> システム停止、重大なクレーム、本日中の締切、重要顧客の来訪、至急の依頼。</div>
           </div>
           <div class="rule-row">
             <span class="badge mid">中</span>
-            <div><strong>期限内に対応。</strong> 数日内の提出、期限付きの依頼、通常の業務連絡、会議・予定の変更、リマインド、対応事項のある全社連絡。</div>
+            <div><strong>期限内に対応。</strong> 数日内の提出、期限付きの依頼、通常の業務連絡（「急ぎではありません」とあれば低）、会議・予定の変更、リマインド、対応事項のある全社連絡。</div>
           </div>
           <div class="rule-row">
             <span class="badge low">低</span>
-            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有、「急ぎではない」と書かれた軽い依頼。</div>
+            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有、「急ぎではありません」などと書かれた軽い依頼。</div>
           </div>
           <div class="rule-row">
             <span class="badge neutral">返信</span>
-            <div><strong>「返信不要」は送らず完了。</strong> 「返信不要」とあれば個人からの声かけでも送りません。お知らせ・情報共有だけの連絡も返信しません。依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。</div>
+            <div><strong>「返信不要」は送らず完了。</strong> 依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。ただし「返信不要」とあれば個人からの声かけでも送りません。お知らせ・情報共有だけの連絡は返信しません。</div>
           </div>
           <div class="rule-row">
             <span class="badge neutral">電話</span>
@@ -1283,7 +1292,7 @@
     { sender: "経理部", text: "本日締切の振込手続きが1件漏れています。15時までに処理が必要です。", prio: "high", reply: "申し訳ございません。すぐに処理します。", requiresReply: true },
     { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。至急対応してください。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
     { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", reply: "拝読いたします。", requiresReply: false },
-    { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。どうなっていますか？", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
+    { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。至急確認をお願いします。", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
     { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。いかがいたしましょうか。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
     { sender: "全社通知", text: "コンプライアンス委員からの今月の標語です。（返信不要）", prio: "low", reply: "確認いたしました。", requiresReply: false },
     { sender: "総務部 施設担当", text: "来月のオフィスレイアウト変更に伴う座席希望アンケートを金曜までに提出してください。", prio: "mid", reply: "承知いたしました。期日までに提出します。", requiresReply: true },
@@ -1521,14 +1530,17 @@
       const nextSteps = [];
       if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);
       if (chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
-      if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");
+      if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は至急・システム停止・重要顧客、中は期限や予定変更のある業務連絡、低は雑談・社内ニュース・情報共有を目印にしましょう。");
       if (replyAccuracy !== null && replyAccuracy < GOOD) {
         if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
         if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
         if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
       } else {
         if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
-        if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+        if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {
+          if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+          if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
+        }
       }
       if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
       if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
@@ -1667,9 +1679,11 @@
       renderSettings();
     });
 
-    els.pauseBtn.addEventListener("click", togglePause);
-    els.resumeBtn.addEventListener("click", togglePause);
-    els.phonePause.addEventListener("click", togglePause);
+    // ヘッダーの一時停止は常に受け付ける（切り替わった画面の上に重なることがない）。
+    els.pauseBtn.addEventListener("click", () => togglePause());
+    // 停止画面の「再開」と着信画面の「一時停止」は互いの位置に重なるため門番を通す（キーボード起動は常に受け付ける）。
+    els.resumeBtn.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });
+    els.phonePause.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });
     // 「終了」は誤クリック1回で訓練が打ち切られないよう、一時停止したうえで確認する。
     els.finishBtn.addEventListener("click", openFinishConfirm);
     els.finishConfirmBtn.addEventListener("click", () => endGame("manual"));
@@ -1788,10 +1802,11 @@
   }
 
   // ---- 操作の門番（原則: 画面が切り替わった直後は、切り替わる前の画面に向けた操作を受け付けない） ----
-  // 1. 画面が切り替わった（優先度→返信パネルの差し替え、着信・停止画面の開閉）直後 POINTER_SETTLE_MS はマウス操作を無視する
+  // 1. 画面が切り替わった（優先度↔返信パネルの差し替え、「返信せずに完了」の確認への切り替え、着信・停止画面の開閉）直後 POINTER_SETTLE_MS はマウス操作を無視する
   //    （ダブルクリックの2回目が、同じ場所に現れた別のボタンに落ちるのを防ぐ）。
-  // 2. 優先度ボタンをマウスで押した直後 SAME_SPOT_MS は、同じ位置（SAME_SPOT_PX 以内）へのクリックを無視する（ゆっくりなダブルクリック）。
-  // 3. 着信画面の表示直後 KEY_SETTLE_MS はキー操作も無視する（入力中の Space/Enter の続きが届く唯一の場面）。
+  // 2. 優先度ボタン・「優先度を選び直す」・確認に切り替わる「返信せずに完了」をマウスで押した直後 SAME_SPOT_MS は、
+  //    同じ位置（SAME_SPOT_PX 以内）へのクリックを無視する（ゆっくりなダブルクリック）。
+  // 3. 着信画面の表示直後 KEY_SETTLE_MS はキー操作も無視する（入力中の Space/Enter の続きが届く唯一の場面）。着信画面が閉じれば解ける。
   // それ以外のキーボード操作は常に受け付ける（Enter がダブルクリックの2回目になることはない）。
   // キーの長押し（自動リピート）は操作として扱わない（bindEvents の keydown で捨てる）。
   const POINTER_SETTLE_MS = 400;
@@ -1813,7 +1828,8 @@
     gate.changedAt = Date.now();
     gate.scope = scope || "all";
     gate.spot = isPointerEvent(event) ? { x: event.clientX, y: event.clientY, at: gate.changedAt } : null;
-    if (lockKeys) gate.keyLockedUntil = gate.changedAt + KEY_SETTLE_MS;
+    // キーの締め出しは、締め出しを求めた画面（着信画面）が前面にある間だけ。別の切り替えが起きた時点で解ける。
+    gate.keyLockedUntil = lockKeys ? gate.changedAt + KEY_SETTLE_MS : 0;
   }
 
   // この操作を受け付けてよいか。event が無い／キーボード由来なら、キーの締め出し中でない限り受け付ける。
@@ -1920,9 +1936,9 @@
     return Logic.levelSubtitle(level, state.durationSec);
   }
 
-  // 途中で終了した場合に、まだ届いていなかったチャットの数
+  // 途中で終了した場合に、まだ届いていなかったチャットの数（Level 1 は 0 固定・負値は 0 にする正規化は Logic が行う）
   function undeliveredCount() {
-    return state.level === 1 ? 0 : Math.max(0, state.pool.length - state.nextPoolIndex);
+    return state.pool.length - state.nextPoolIndex;
   }
 
   function createChat(data) {
@@ -2044,7 +2060,7 @@
       const badgeClass = chat.status === "completed" ? "completed" : chat.status === "unreplied" ? chat.selectedPrio : "unread";
       const active = chat.id === state.activeId ? " active" : "";
       const statusClass = chat.status === "completed" ? " completed" : chat.status === "unread" ? " unread" : "";
-      const statusText = chat.status === "unreplied" ? `保留 ${labels[chat.selectedPrio]}` : labels[chat.status];
+      const statusText = chat.status === "unreplied" ? `${labels.unreplied} ${labels[chat.selectedPrio]}` : labels[chat.status];
       return `
         <button class="chat-item${active}${statusClass}" type="button" data-chat-id="${chat.id}">
           <span class="chat-row">
@@ -2073,6 +2089,8 @@
     if (!accepts(event, "inbox")) return;
     const chat = state.chats.find((item) => item.id === id);
     if (!chat) return;
+    // 別のチャットを開いたら、前のチャットでのパネル差し替えに対する窓は閉じる（開いたパネルは利用者が今求めたもの）。
+    if (gate.scope === "panel" && state.activeId !== id) { gate.changedAt = 0; gate.spot = null; }
     state.activeId = id;
     if (!chat.openedAt) chat.openedAt = Date.now();
     renderAll();
@@ -2100,7 +2118,7 @@
     }
 
     els.chatHeading.textContent = chat.sender;
-    els.chatBadge.textContent = chat.status === "unreplied" ? `保留 ${labels[chat.selectedPrio]}` : labels[chat.status];
+    els.chatBadge.textContent = chat.status === "unreplied" ? `${labels.unreplied} ${labels[chat.selectedPrio]}` : labels[chat.status];
     els.chatBadge.className = `badge ${chat.status === "unreplied" ? chat.selectedPrio : "neutral"}`;
     els.messageStage.innerHTML = `
       <article class="message-bubble">
@@ -2170,6 +2188,9 @@
     chat.status = "unread";
     chat.selectedPrio = null;
     renderAll();
+    // 返信パネルが優先度パネルに差し替わる（同じ場所に優先度ボタンが現れる。ゆったり表示ではこのボタンの真下が「低」）。
+    // renderAll の後に記録するのは、renderPriorityPanel が消す「同じ位置」の規則をここでは残すため（ゆっくりなダブルクリックの 2 回目も捨てる）。
+    if (isPointerEvent(event)) markScreenChange(event, false, "panel");
   }
 
   function updateTypingProgress(chat) {
@@ -2298,6 +2319,8 @@
       if (normalize(chat.draft) && noReplyBtn.dataset.confirm !== "1") {
         noReplyBtn.dataset.confirm = "1";
         noReplyBtn.textContent = "入力途中です。送らずに完了するならもう一度押す";
+        // ボタンの意味が「確認」に切り替わった。ダブルクリックの 2 回目を確認の押下として受け付けない。
+        if (isPointerEvent(event)) markScreenChange(event, false, "panel");
         noReplyTimer = window.setTimeout(resetNoReplyConfirm, 4000);
         return;
       }
@@ -2451,6 +2474,8 @@
       if (state.currentPhone) els.phoneModal.classList.remove("show");
       // 背面のボタンに操作が届かないよう、背面を不活性にして停止画面へフォーカスを移す。
       setShellInert();
+      // 停止画面が前面に出た（着信画面の「一時停止」の真下に「再開」が重なるため、ダブルクリックの 2 回目を捨てる）
+      markScreenChange(null);
       els.resumeBtn.focus();
     } else {
       if (state.pausedAt) {
@@ -2578,9 +2603,9 @@
     els.timer.textContent = state.level === 1 ? "全件" : formatTime(state.timeRemaining);
     els.doneCount.textContent = completed;
     els.openCount.textContent = open;
-    els.unreadCount.textContent = `未処理 ${unread}`;
-    els.pendingCount.textContent = `保留 ${pending}`;
-    els.completedCount.textContent = `処理済 ${completed}`;
+    els.unreadCount.textContent = `${labels.unread} ${unread}`;
+    els.pendingCount.textContent = `${labels.unreplied} ${pending}`;
+    els.completedCount.textContent = `${labels.completed} ${completed}`;
   }
 
   function resetTimers() {

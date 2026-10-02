@@ -97,14 +97,14 @@ const STRENGTH_RULES = Object.freeze([
 const STRENGTH_FALLBACK = '開始して結果を残せています。次回は1件ずつ確実に進めましょう。';
 
 // 7-3. 次の練習（この順で条件を満たす行を追加。何も追加されなければ fallback）
-// 1行が複数の文を生む場合は texts に配列で並べ、each で「どの文を出すか」を判定する
+// 1行が複数の文を生む場合は each に配列で並べ、各要素の when で「どの文を出すか」を判定する
 const NEXT_STEP_RULES = Object.freeze([
   { when: (c) => c.undelivered > 0,
     text: '途中で終了したため、{undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。' },
   { when: (c) => c.hasIncomplete,
     text: '未完了タスクを減らすため、未処理を開く順番を意識しましょう。' },
   { when: (c) => isBelowOrAbove(c.prioAccuracy, '<', CONST.GOOD),
-    text: '高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。' },
+    text: '高は至急・システム停止・重要顧客、中は期限や予定変更のある業務連絡、低は雑談・社内ニュース・情報共有を目印にしましょう。' },
   { when: (c) => isBelowOrAbove(c.replyAccuracy, '<', CONST.GOOD),
     each: [
       { when: (c) => c.repliedToNoReply,
@@ -119,7 +119,12 @@ const NEXT_STEP_RULES = Object.freeze([
     text: '返信不要タスクは入力せずに完了する練習を増やしましょう。' },
   { when: (c) => !isBelowOrAbove(c.replyAccuracy, '<', CONST.GOOD)
                  && isBelowOrAbove(c.requiredReplyAccuracy, '<', CONST.GOOD),
-    text: '依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。' },
+    each: [
+      { when: (c) => c.skippedRequired,
+        text: '依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。' },
+      { when: (c) => c.wrongReplyText,
+        text: '相手の依頼に沿った返信文を選びましょう。' },
+    ] },
   { when: (c) => c.level === 3 && isBelowOrAbove(c.phoneAccuracy, '<', CONST.GOOD),
     text: '電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。' },
 ]);

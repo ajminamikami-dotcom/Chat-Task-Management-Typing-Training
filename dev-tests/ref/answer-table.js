@@ -6,13 +6,13 @@
 
 // 属性の意味（仕様書 §11）
 //   urgent      : システム停止・重大なクレーム・本日中の締切・重要顧客の来訪・至急の依頼
-//   dated       : 数日内の提出・期限付きの依頼・通常の業務連絡・会議や予定の変更・期限のリマインド・対応事項のある全社連絡
+//   dated       : 数日内の提出・期限付きの依頼・通常の業務連絡・会議・予定の変更・リマインド・対応事項のある全社連絡
 //   noReplyMark : 本文に「返信不要」の表記がある
 //   personal    : 同僚など個人からの声かけ
 //   request     : 依頼・質問・確認事項がある
 const ATTRIBUTES = [
   // Level 1
-  { level: 1, sender: "田中部長",    urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "クレーム", request: "てくれ" }, why: "重大なクレーム・至急の依頼" },
+  { level: 1, sender: "田中部長",    urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "至急", request: "てくれ" }, why: "至急の依頼（クレームの折り返し）" },
   { level: 1, sender: "システム通知", urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "ダウン", request: "ください" }, why: "サーバーダウン（システム停止）・復旧依頼" },
   { level: 1, sender: "営業推進部",   urgent: false, dated: false, noReplyMark: true,  personal: false, request: false, cue: {}, why: "配信のお知らせ（返信不要）" },
   { level: 1, sender: "総務部",       urgent: false, dated: true,  noReplyMark: false, personal: false, request: true,  cue: { dated: "今週末までに", request: "ください" }, why: "今週末までに提出" },
@@ -22,13 +22,13 @@ const ATTRIBUTES = [
   { level: 1, sender: "営業の鈴木",   urgent: false, dated: false, noReplyMark: false, personal: true,  request: false, cue: { personal: "営業の" }, why: "同僚からの声かけ（お土産）" },
   { level: 1, sender: "A社 担当者",   urgent: false, dated: true,  noReplyMark: false, personal: false, request: true,  cue: { dated: "会議", request: "でしょうか" }, why: "会議時間の変更の相談（予定の変更・質問）" },
   { level: 1, sender: "受付",         urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "重要顧客", request: "いかがいたしましょうか" }, why: "重要顧客の来訪・確認事項" },
-  { level: 1, sender: "全社通知",     urgent: false, dated: true,  noReplyMark: true,  personal: false, request: true,  cue: { dated: "切ってください", request: "ください" }, why: "停電に伴う対応事項（PC の電源）のある全社連絡（返信不要）" },
+  { level: 1, sender: "全社通知",     urgent: false, dated: true,  noReplyMark: true,  personal: false, request: true,  cue: { dated: "金曜の退社時", request: "ください" }, why: "停電に伴う対応事項（金曜の退社時に PC の電源）のある全社連絡（返信不要）" },
   // Level 2/3
-  { level: 2, sender: "顧客サポート", urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "重大なクレーム", request: "お願いします" }, why: "重大なクレーム（確認事項）" },
+  { level: 2, sender: "顧客サポート", urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "重大なクレーム", request: "お願いします" }, why: "重大なクレーム・至急の依頼" },
   { level: 2, sender: "経理部",       urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "本日締切", request: "必要です" }, why: "本日締切・15時までに処理" },
   { level: 2, sender: "サーバー監視", urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "至急", request: "ください" }, why: "障害アラート・至急対応の依頼" },
   { level: 2, sender: "営業推進部",   urgent: false, dated: false, noReplyMark: true,  personal: false, request: false, cue: {}, why: "配信のお知らせ（返信不要）" },
-  { level: 2, sender: "B社 担当者",   urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "足りていません", request: "ますか" }, why: "納品不足のクレーム・質問" },
+  { level: 2, sender: "B社 担当者",   urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "至急", request: "お願いします" }, why: "納品不足のクレーム・至急の依頼" },
   { level: 2, sender: "受付",         urgent: true,  dated: false, noReplyMark: false, personal: false, request: true,  cue: { urgent: "重要顧客", request: "いかがいたしましょうか" }, why: "重要顧客の来訪（お怒り）・確認事項" },
   { level: 2, sender: "全社通知",     urgent: false, dated: false, noReplyMark: true,  personal: false, request: false, cue: {}, why: "標語のお知らせ（返信不要）" },
   { level: 2, sender: "総務部 施設担当", urgent: false, dated: true, noReplyMark: false, personal: false, request: true, cue: { dated: "金曜までに", request: "ください" }, why: "金曜までに提出" },
@@ -54,9 +54,10 @@ const PERSONAL_CUES = ["同僚", "営業の"];
 const PANEL_PHRASES = {
   urgent: ["システム停止", "重大なクレーム", "本日中の締切", "重要顧客の来訪", "至急の依頼"],
   dated: ["数日内の提出", "期限付きの依頼", "通常の業務連絡", "会議・予定の変更", "リマインド", "対応事項のある全社連絡"],
-  low: ["雑談", "社内ニュース", "任意参加の案内", "情報共有", "「急ぎではない」と書かれた軽い依頼"],
+  low: ["雑談", "社内ニュース", "任意参加の案内", "情報共有", "「急ぎではありません」などと書かれた軽い依頼"],
   reply: ["「返信不要」は送らず完了", "個人からの声かけでも", "依頼・質問・確認事項がある連絡には返信", "内容が情報共有でも返信"],
   phone: ["営業の電話や誘いの電話は無視"],
+  order: ["上から順に見て、最初に当てはまる区分にします", "「返信不要」とあっても、予定の変更や対応事項があれば「中」"],
 };
 
 const PHONE_ATTRIBUTES = [

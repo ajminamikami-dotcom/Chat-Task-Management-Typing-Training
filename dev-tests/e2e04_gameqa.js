@@ -15,7 +15,8 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   R.section("1 ポーズ連打（一時停止/再開を高速に50往復）");
   await start(page, 2, 300);
   const t0 = secs(await page.locator(sel.timer).innerText());
-  for (let i = 0; i < 50; i++) { await page.click(sel.pause); await page.click(sel.resume); }
+  // 停止画面が出た直後 0.4 秒は「再開」のクリックを受け付けない仕様なので、高速往復はヘッダーの一時停止と Esc（常に受け付ける）で行う
+  for (let i = 0; i < 50; i++) { await page.click(sel.pause); await page.keyboard.press("Escape"); }
   await page.waitForTimeout(300);
   R.ok("V-1", !(await page.locator("#pause-overlay.show").count()), "50往復後に停止画面が残っていない");
   await page.waitForTimeout(3000);
@@ -108,7 +109,7 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   await page.click(sel.prio("low")); await page.waitForTimeout(750);
   await page.locator(sel.chatItems).nth(0).click(); await page.waitForTimeout(80);      // 戻る
   R.ok("SB-1", (await page.locator("#chat-status-badge").innerText()).includes("保留 高"), "別チャットを経由しても最初の優先度が保持");
-  await page.click(sel.redo); await page.waitForTimeout(80);
+  await page.click(sel.redo); await page.waitForTimeout(450);   // 選び直した直後 0.4 秒はパネル内のクリックを受け付けない仕様
   await page.click(sel.prio("mid")); await page.waitForTimeout(750);
   await page.click(sel.option(0)); await page.waitForTimeout(100);
   await page.locator(sel.chatItems).nth(0).click(); await page.waitForTimeout(80);
@@ -148,10 +149,10 @@ const secs = (t) => { const [m, s] = t.split(":").map(Number); return m * 60 + s
   const scan = async (w) => { const t = await page.locator("body").innerText(); if (BAD.test(t)) hits.push(w + ":" + t.match(BAD)[0]); };
   await scan("開始"); await start(page, 3, 300); await scan("開始直後");
   await page.locator(sel.chatItems).first().click(); await scan("選択");
-  await page.click(sel.prio("high")); await page.waitForTimeout(750); await scan("保留"); await page.click(sel.redo); await scan("選び直し");
+  await page.click(sel.prio("high")); await page.waitForTimeout(750); await scan("保留"); await page.click(sel.redo); await scan("選び直し"); await page.waitForTimeout(450);
   await page.click(sel.prio("low")); await page.waitForTimeout(750); await clickNoReply(page); await scan("完了直後");
   await page.locator("#chat-list .chat-item.completed").first().click(); await scan("処理済表示");
-  await page.click(sel.pause); await scan("一時停止"); await page.click(sel.resume);
+  await page.click(sel.pause); await scan("一時停止"); await page.waitForTimeout(450); await page.click(sel.resume);
   await finishNow(page); await page.waitForSelector(sel.result); await scan("結果");
   R.ok("AB-1", hits.length === 0, hits.length ? hits.join(" / ") : "未解決値なし");
 

@@ -32,7 +32,7 @@ const mismatch = all.filter((d) => {
 });
 R.ok("AA-1", mismatch.length === 0, `本文・送信者の類型語だけから導いた返信要否と正解表が食い違う問題: ${mismatch.length}件 ${mismatch.map((d) => d.sender).join(",")}`);
 R.ok("AA-2", !all.some((d) => d.text.includes("返信不要") && d.req), "「返信不要」と書いてあるのに返信必要な問題が無い");
-R.ok("AA-3", data.L1.filter((d) => d.prio === "high").every((d) => /クレーム|ダウン|重要顧客|至急|本日/.test(d.text)), "Level1 の「高」は本文に至急の根拠がある");
+R.ok("AA-3", all.filter((d) => d.prio === "high").every((d) => /システム停止|ダウン|重大なクレーム|本日|重要顧客|至急/.test(d.text)), "全レベルの「高」は本文に判定基準の語（システム停止・重大なクレーム・本日・重要顧客・至急）がある");
 
 R.section("原則 問題データの正解が規則表（仕様書 §11）から導ける");
 {

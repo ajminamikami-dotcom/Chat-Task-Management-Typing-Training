@@ -390,7 +390,9 @@ function summarize(session) {
     nextSteps.push('未完了タスクを減らすため、未処理を開く順番を意識しましょう。');
   }
   if (prioAccuracy !== null && prioAccuracy < GOOD) {
-    nextSteps.push('高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。');
+    nextSteps.push(
+      '高は至急・システム停止・重要顧客、中は期限や予定変更のある業務連絡、低は雑談・社内ニュース・情報共有を目印にしましょう。'
+    );
   }
   if (replyAccuracy !== null && replyAccuracy < GOOD) {
     if (repliedToNoReply) {
@@ -410,7 +412,13 @@ function summarize(session) {
       nextSteps.push('返信不要タスクは入力せずに完了する練習を増やしましょう。');
     }
     if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {
-      nextSteps.push('依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。');
+      // 内訳ごとに（この順）: skippedRequired → wrongReplyText
+      if (skippedRequired) {
+        nextSteps.push('依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。');
+      }
+      if (wrongReplyText) {
+        nextSteps.push('相手の依頼に沿った返信文を選びましょう。');
+      }
     }
   }
   if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) {

@@ -153,11 +153,12 @@ async function resume(page) {
   await page.waitForTimeout(420);
 }
 
-// 「返信せずに完了」を押す。入力途中の文章があるときは確認のためもう一度押す仕様。
+// 「返信せずに完了」を押す。入力途中の文章があるときは確認のためもう一度押す仕様
+// （確認に切り替わった直後 0.7 秒の同じ位置のクリックはダブルクリックとして捨てられるので、人間と同じく少し待ってから押す）。
 async function clickNoReply(page) {
   await page.click(sel.noReply, { timeout: 5000 });
   await page.waitForTimeout(60);
-  if (await page.locator('#no-reply-btn[data-confirm="1"]').count()) { await page.click(sel.noReply, { timeout: 5000 }); await page.waitForTimeout(60); }
+  if (await page.locator('#no-reply-btn[data-confirm="1"]').count()) { await page.waitForTimeout(720); await page.click(sel.noReply, { timeout: 5000 }); await page.waitForTimeout(60); }
 }
 
 // 「終了」→ 確認画面 →「終了して結果を見る」。

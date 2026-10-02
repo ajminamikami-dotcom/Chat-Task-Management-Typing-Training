@@ -73,12 +73,12 @@ const LOGIC_MUTANTS = [
   ["L54", "CSV のレベル表記からスペースを削除", "`Level ${level}`,", "`Level${level}`,"],
   ["L56", "要確認表から未完了行を外す", 'if (chat.status !== "completed") return true;', 'if (chat.status !== "completed") return false;'],
   ["L57", "強みの既定行を削除", 'if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");', ""],
-  ["L58", "優先度の助言行を削除", 'if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は緊急度と影響範囲、中は期限、低は情報共有や雑談を目印にしましょう。");', ""],
+  ["L58", "優先度の助言行を削除", 'if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は至急・システム停止・重要顧客、中は期限や予定変更のある業務連絡、低は雑談・社内ニュース・情報共有を目印にしましょう。");', ""],
   ["L59", "電話の助言行を削除", 'if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");', ""],
   ["L60", "電話の称賛行を削除", 'if (level === 3 && phoneRecords.length >= PRAISE_MIN_PHONES && phoneAccuracy !== null && phoneAccuracy >= GOOD) strengths.push("電話割り込みの緊急度判断が安定しています。");', ""],
   ["L61", "既定の助言行を削除", 'if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");', ""],
   ["L62", "返信不要の助言行を削除", 'if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");', ""],
-  ["L63", "返信必要の助言行を削除", 'if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");', ""],
+  ["L63", "返信必要の助言を内訳で分けない", "if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {\n          if (skippedRequired) nextSteps.push", "if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {\n          nextSteps.push"],
   ["L64", "集計の未着クランプを外す", "const undelivered = level === 1 ? 0 : Math.max(0, session.undelivered || 0);", "const undelivered = level === 1 ? 0 : (session.undelivered || 0);"],
   ["L65", "CSV の未着クランプを外す", 'level === 1 ? "0" : String(Math.max(0, session.undelivered || 0))', 'level === 1 ? "0" : String(session.undelivered || 0)'],
   ["L66", "電話判断の正誤を反転", "return { correct: isEmergency === didAnswer };", "return { correct: isEmergency !== didAnswer };"],
@@ -119,6 +119,14 @@ const UI_MUTANTS = [
   ["U26", "Level 1 で Alt+数字のあと選択肢へフォーカスを移さない", "if (first && !pointer) first.focus();", "if (false) first.focus();"],
   ["U27", "優先度クリック直後に受信トレイのクリックも捨てる（scope 無視）", '&& !(area === "inbox" && gate.scope === "panel")) return false;', ") return false;"],
   ["U28", "「優先度を選び直す」が門番を通らない", "  function reopenPriority(event) {\n    if (state.gameOver || state.paused) return;\n    if (!accepts(event)) return;", "  function reopenPriority(event) {\n    if (state.gameOver || state.paused) return;"],
+  // V10: 門番の一本化レビューで直した 5 点
+  ["U29", "「優先度を選び直す」でパネル差し替えを記録しない（ゆったり表示でダブルクリックが「低」に落ちる）", '    if (isPointerEvent(event)) markScreenChange(event, false, "panel");\n  }\n\n  function updateTypingProgress', '  }\n\n  function updateTypingProgress'],
+  ["U30", "別のチャットを開いても前のパネル差し替えの窓を閉じない", '    if (gate.scope === "panel" && state.activeId !== id) { gate.changedAt = 0; gate.spot = null; }\n', ""],
+  ["U31", "着信画面が閉じてもキーの締め出しを解かない", "gate.keyLockedUntil = lockKeys ? gate.changedAt + KEY_SETTLE_MS : 0;", "if (lockKeys) gate.keyLockedUntil = gate.changedAt + KEY_SETTLE_MS;"],
+  ["U32", "停止画面の「再開」が門番を通らない", 'els.resumeBtn.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });', 'els.resumeBtn.addEventListener("click", () => togglePause());'],
+  ["U33", "着信画面の「一時停止」が門番を通らない", 'els.phonePause.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });', 'els.phonePause.addEventListener("click", () => togglePause());'],
+  ["U34", "「返信せずに完了」の確認への切り替えを記録しない（ダブルクリックで確認を突破）", '        if (isPointerEvent(event)) markScreenChange(event, false, "panel");\n        noReplyTimer = window.setTimeout(resetNoReplyConfirm, 4000);', '        noReplyTimer = window.setTimeout(resetNoReplyConfirm, 4000);'],
+  ["U35", "停止画面が出たことを記録しない", "      markScreenChange(null);\n      els.resumeBtn.focus();", "      els.resumeBtn.focus();"],
 ];
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctt-mut-"));

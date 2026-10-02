@@ -62,7 +62,7 @@ function recompute(rows) {
       if (!paused && n === 2) { await page.click(sel.pause); await page.waitForTimeout(2500); await resume(page); paused = true; await page.waitForTimeout(100); continue; }
       if (!redone && n === 3 && (await page.locator(sel.openChats).count())) {
         await page.locator(sel.openChats).first().click(); await page.click(sel.prio("low")); await page.waitForTimeout(750);
-        await page.click(sel.redo); await page.waitForTimeout(80); redone = true; continue;
+        await page.click(sel.redo); await page.waitForTimeout(450); redone = true; continue;   // 選び直した直後 0.4 秒はパネル内のクリックを受け付けない仕様
       }
       // Level 2 は時間切れ経路を検証したいので、15件処理したら手を止めて残り時間を待つ
       // （速く処理し切ると全件完了で自動終了し、時間切れに到達しないため）
