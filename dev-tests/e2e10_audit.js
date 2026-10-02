@@ -470,6 +470,7 @@ async function holdEnter(page, times = 6) {
     R.ok("G-選び直し2回", b1 === "未処理", `ゆったり表示で「優先度を選び直す」をダブルクリックしても 2 回目が「低」に落ちない（${b1}）`);
     // 規則そのもの: 選び直した直後 0.4 秒のパネル内クリックは捨てられ、過ぎれば受け付ける
     await q.waitForTimeout(750);
+    if (await q.locator(sel.redo).count()) { await q.click(sel.redo); await q.waitForTimeout(450); }   // 上の検査が NG のとき（優先度が付いてしまったとき）も続きを検査できるように戻す
     await q.click(sel.prio("high")); await q.waitForTimeout(750);
     const rb2 = await q.locator(sel.redo).boundingBox();
     await q.mouse.click(rb2.x + rb2.width / 2, rb2.y + rb2.height / 2); await q.waitForTimeout(40);

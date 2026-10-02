@@ -44,7 +44,7 @@ const LOGIC_MUTANTS = [
   ["L25", "未着の助言行を削除", "if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);", ""],
   ["L26", "未完了の助言行を削除", 'if (chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");', ""],
   ["L27", "返信の助言を内訳と重ねて二重に出す", "      } else {\n        if (noReplyAccuracy !== null && noReplyAccuracy < GOOD)", "      }\n      {\n        if (noReplyAccuracy !== null && noReplyAccuracy < GOOD)"],
-  ["L28", "返信文の助言行を削除", 'if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");', ""],
+  ["L28", "返信文の助言行を削除（返信正答率が低いとき）", '\n        if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");', ""],
   ["L29", "助言の順序を入れ替える", 'if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");\n        if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");', 'if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");\n        if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");'],
   ["L30", "最後の助言を常に出す", 'if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");', 'nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");'],
   ["L31", "要確認の条件を AND にする", "return !chat.isPrioCorrect || !chat.isReplyCorrect;", "return !chat.isPrioCorrect && !chat.isReplyCorrect;"],
@@ -87,6 +87,9 @@ const LOGIC_MUTANTS = [
   ["L69", "訂正文の返信不要の行を削除", 'else if (!chat.requiresReply) replyText = "返信せずに完了するのが正解です。";', ""],
   ["L70", "要確認表の未完了の優先度表示を変える", "if (chat.status !== \"completed\") return `正解: ${labels[chat.correctPrio]}`;", "if (chat.status !== \"completed\") return `${labels[chat.correctPrio]}`;"],
   ["L71", "切り分けの称賛で返信必要の内訳を見ない", "&& !(requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD)) strengths.push", ") strengths.push"],
+  // V10: 返信必要の正答率だけが低いときの助言の内訳（仕様 §7-3 表 6 行目）
+  ["L72", "返信必要の正答率が低いとき「返信せず」の助言行を削除", '\n          if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");', ""],
+  ["L73", "返信必要の正答率が低いとき「返信文の選択」の助言行を削除", '\n          if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");', ""],
   ["L55", "要確認表を逆順にする", "const reviewRows = chats.filter((chat) => {\n        if (chat.status !== \"completed\") return true;\n        return !chat.isPrioCorrect || !chat.isReplyCorrect;\n      });", "const reviewRows = chats.filter((chat) => {\n        if (chat.status !== \"completed\") return true;\n        return !chat.isPrioCorrect || !chat.isReplyCorrect;\n      }).reverse();"],
 ];
 
