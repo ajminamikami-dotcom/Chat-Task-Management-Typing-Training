@@ -159,6 +159,7 @@ OFFICE PULSE で確立した「バグを個別修正で終わらせず、**二�
 ```bash
 cd dev-tests
 npm install                    # playwright を入れる（初回のみ）。既にグローバルにある場合は NODE_PATH でも可
+npx playwright install chromium   # 検査用の Chromium を入れる（初回のみ。約 150 MB をダウンロード）
 node run-all.js                # 全12本（約60分）
 QUICK=1 node run-all.js        # 長時間スイートを除く（約6分）: 07, diff-check, golden, 03, 05, 06, 10
 node mutate.js                 # 変異検査（約30分。Logic の変異体は差分・ゴールデン・e2e07、UI の変異体は e2e10 で判定）
