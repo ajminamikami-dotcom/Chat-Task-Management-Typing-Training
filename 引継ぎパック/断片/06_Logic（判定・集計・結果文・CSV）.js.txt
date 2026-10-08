@@ -1,0 +1,252 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1370〜1615（全 2732 行）
+区画: 06_Logic（判定・集計・結果文・CSV） … 判定・正答率・助言文・CSV・入力一致の規則はここだけ（仕様書 dev-tests/spec と 1 対 1）
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  /* @@LOGIC_BEGIN
+     判定・集計・表示文・CSV・入力一致のロジック。
+     このブロックは DOM・現在時刻・乱数・state に一切依存しない純粋関数だけで構成する（原則の一本化）。
+     dev-tests の差分検査（diff-check.js）はこのブロックをそのまま切り出して Node で動かし、
+     仕様書（dev-tests/spec/judgment-spec.md）だけから書かれた参照実装と乱数入力で突き合わせる。
+     したがって「判定・集計・表示文に関わる規則」はここ以外に書かない。 */
+  const Logic = (() => {
+    const labels = { high: "高", mid: "中", low: "低", unread: "未処理", unreplied: "保留", completed: "処理済" };
+    const END_REASON = { time: "時間終了", complete: "全件完了", manual: "手動終了" };
+    const GOOD = 80;                   // 正答率がこの値以上なら「安定」、未満なら「次の練習」に助言を出す
+    const PRAISE_MIN_COMPLETED = 3;    // 完了数がこれ未満なら「安定しています」と断定しない
+    const PRAISE_MIN_PHONES = 2;       // 着信数がこれ未満なら電話判断を称賛しない
+
+    // 空白は無視する。IME の句読点設定が「，．」でも「、。」と同じ文字として扱う（お手本どおり打っても不一致になるのを防ぐ）。
+    function normalize(value) {
+      return String(value || "").replace(/\s+/g, "").replace(/，/g, "、").replace(/．/g, "。");
+    }
+
+    function commonPrefixLength(a, b) {
+      const max = Math.min(a.length, b.length);
+      let index = 0;
+      while (index < max && a[index] === b[index]) index += 1;
+      return index;
+    }
+
+    // 入力欄の下に出す進捗（%・送信可否・案内文）
+    function typingProgress(draftText, replyText) {
+      const draft = normalize(draftText);
+      const target = normalize(replyText);
+      const matched = commonPrefixLength(draft, target);
+      const extra = Math.max(0, draft.length - target.length);
+      const done = draft === target && target.length > 0;
+      let percentValue = target.length ? Math.min(100, Math.round((matched / target.length) * 100)) : 0;
+      // 一致していないのに 100% と見せない
+      if (!done && percentValue === 100) percentValue = 99;
+      let feedback;
+      if (done) feedback = "入力が一致しました。送信できます。";
+      else if (matched === target.length && extra > 0) feedback = `文字が多すぎます。末尾の ${extra} 文字を消してください（一致 ${matched}/${target.length} 文字）`;
+      else if (draft.length > matched) feedback = `一致 ${matched}/${target.length} 文字。赤い文字の位置から直してください`;
+      else feedback = `一致 ${matched}/${target.length} 文字`;
+      return { percent: percentValue, done, feedback, matched, extra };
+    }
+
+    // お手本の文字ごとの色（typed=緑 / wrong=赤 / plain=未入力 / space=空白）と、お手本より長く打った余分な文字
+    // 先頭からの一致分を緑、最初の誤りから入力済みの範囲を赤にする（位置が偶然合った文字を緑にしない）。
+    function targetMarks(draftText, replyText) {
+      const draft = normalize(draftText);
+      const target = normalize(replyText);
+      const matched = commonPrefixLength(draft, target);
+      let position = 0;
+      const marks = Array.from(String(replyText || "")).map((char) => {
+        if (/\s/.test(char)) return { char, state: "space" };
+        const index = position;
+        position += 1;
+        if (index < matched) return { char, state: "typed" };
+        if (index < draft.length) return { char, state: "wrong" };
+        return { char, state: "plain" };
+      });
+      return { marks, extra: draft.length > target.length ? draft.slice(target.length) : "" };
+    }
+
+    // 1件の完了時の正誤。優先度と返信は独立に判定する（一因一罰）。
+    function judge(chat, result, level) {
+      const isPrioCorrect = chat.correctPrio === chat.selectedPrio;
+      let isReplyCorrect;
+      if (result.action === "no_reply") {
+        isReplyCorrect = chat.requiresReply === false;
+      } else if (level === 1) {
+        isReplyCorrect = chat.requiresReply === true && result.optionIndex === chat.correctOpt;
+      } else {
+        isReplyCorrect = chat.requiresReply === true && normalize(result.selectedReply) === normalize(chat.reply);
+      }
+      return { isPrioCorrect, isReplyCorrect };
+    }
+
+    // 電話の正誤。緊急の相手に応答した／緊急でない相手を無視した、が正解。
+    function judgePhone(isEmergency, didAnswer) {
+      return { correct: isEmergency === didAnswer };
+    }
+
+    // 分母が0のときに 0% を返すと「全問不正解」に見えてしまうため null を返し、表示側で「-」に置き換える。
+    function percent(numerator, denominator) {
+      if (!denominator) return null;
+      return Math.round((numerator / denominator) * 100);
+    }
+
+    // secondsBetween は toFixed で文字列を返すため、数値化してから平均を取る。
+    // 未計測の項目は空文字なので、Number("") が 0 になって平均を歪めないよう先に除外する。
+    function average(values) {
+      const valid = values
+        .filter((value) => value !== "" && value !== null && value !== undefined)
+        .map(Number)
+        .filter((value) => Number.isFinite(value));
+      if (!valid.length) return null;
+      return (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1);
+    }
+
+    // 集計できなかった値は「-」で表示する。
+    function formatStat(value) {
+      return value === null || value === undefined ? "-" : String(value);
+    }
+
+    function secondsBetween(start, end) {
+      if (!start || !end) return "";
+      return ((end - start) / 1000).toFixed(1);
+    }
+
+    function formatTime(totalSeconds) {
+      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+      const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function levelSubtitle(level, durationSec) {
+      if (level === 1) return "選択式・全件完了で終了";
+      if (level === 2) return `${Math.round(durationSec / 60)}分・タイピング式`;
+      return `${Math.round(durationSec / 60)}分・タイピング式・電話割り込み`;
+    }
+
+    function endReasonText(reason) {
+      return END_REASON[reason] || END_REASON.manual;
+    }
+
+    function resultSubtitle(level, durationSec, reason, undelivered) {
+      return `${levelSubtitle(level, durationSec)} / ${endReasonText(reason)}${undelivered ? `（未着 ${undelivered} 件）` : ""}`;
+    }
+
+    // 結果画面の集計。session: { level, chats, phoneRecords, undelivered }
+    function summarize(session) {
+      const level = session.level;
+      const chats = session.chats;
+      const phoneRecords = session.phoneRecords || [];
+      const undelivered = level === 1 ? 0 : Math.max(0, session.undelivered || 0);
+      const completed = chats.filter((chat) => chat.status === "completed");
+      const total = chats.length;
+      const prioAccuracy = percent(completed.filter((chat) => chat.isPrioCorrect).length, completed.length);
+      const replyAccuracy = percent(completed.filter((chat) => chat.isReplyCorrect).length, completed.length);
+      const averageTotal = average(completed.map((chat) => secondsBetween(chat.openedAt, chat.completedAt)));
+      const noReplyItems = completed.filter((chat) => !chat.requiresReply);
+      const noReplyAccuracy = percent(noReplyItems.filter((chat) => chat.isReplyCorrect).length, noReplyItems.length);
+      const requiredItems = completed.filter((chat) => chat.requiresReply);
+      const requiredReplyAccuracy = percent(requiredItems.filter((chat) => chat.isReplyCorrect).length, requiredItems.length);
+      const phoneAccuracy = percent(phoneRecords.filter((phone) => phone.correct).length, phoneRecords.length);
+      const reviewRows = chats.filter((chat) => {
+        if (chat.status !== "completed") return true;
+        return !chat.isPrioCorrect || !chat.isReplyCorrect;
+      });
+      // 返信の誤りを内訳で見て、助言を実際の誤りに合わせる
+      const repliedToNoReply = completed.some((chat) => !chat.requiresReply && chat.selectedAction === "reply");
+      const skippedRequired = completed.some((chat) => chat.requiresReply && chat.selectedAction === "no_reply");
+      const wrongReplyText = completed.some((chat) => chat.requiresReply && chat.selectedAction === "reply" && !chat.isReplyCorrect);
+      const enough = completed.length >= PRAISE_MIN_COMPLETED;
+
+      const strengths = [];
+      if (completed.length > 0) strengths.push(`${completed.length}件を最後まで処理しました。`);
+      if (enough && prioAccuracy !== null && prioAccuracy >= GOOD) strengths.push("優先度の判断が安定しています。");
+      if (enough && replyAccuracy !== null && replyAccuracy >= GOOD && !(noReplyAccuracy !== null && noReplyAccuracy < GOOD) && !(requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD)) strengths.push("返信する、返信しないの切り分けが安定しています。");
+      if (level === 3 && phoneRecords.length >= PRAISE_MIN_PHONES && phoneAccuracy !== null && phoneAccuracy >= GOOD) strengths.push("電話割り込みの緊急度判断が安定しています。");
+      if (strengths.length === 0) strengths.push("開始して結果を残せています。次回は1件ずつ確実に進めましょう。");
+
+      const nextSteps = [];
+      if (undelivered > 0) nextSteps.push(`途中で終了したため、${undelivered}件のチャットが届く前に終わりました。次は最後まで続けてみましょう。`);
+      if (chats.some((chat) => chat.status !== "completed")) nextSteps.push("未完了タスクを減らすため、未処理を開く順番を意識しましょう。");
+      if (prioAccuracy !== null && prioAccuracy < GOOD) nextSteps.push("高は至急・システム停止・重要顧客、中は期限や予定変更のある業務連絡、低は雑談・社内ニュース・情報共有を目印にしましょう。");
+      if (replyAccuracy !== null && replyAccuracy < GOOD) {
+        if (repliedToNoReply) nextSteps.push("本文に「返信不要」があるか、送信前に一度確認しましょう。返信不要の連絡は入力せずに完了します。");
+        if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+        if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
+      } else {
+        if (noReplyAccuracy !== null && noReplyAccuracy < GOOD) nextSteps.push("返信不要タスクは入力せずに完了する練習を増やしましょう。");
+        if (requiredReplyAccuracy !== null && requiredReplyAccuracy < GOOD) {
+          if (skippedRequired) nextSteps.push("依頼・質問・確認事項がある連絡や、同僚からの声かけには返信しましょう。");
+          if (wrongReplyText) nextSteps.push("相手の依頼に沿った返信文を選びましょう。");
+        }
+      }
+      if (level === 3 && phoneAccuracy !== null && phoneAccuracy < GOOD) nextSteps.push("電話は相手と内容の緊急性を見て、応答と無視を切り替えましょう。");
+      if (nextSteps.length === 0) nextSteps.push("次は同じ条件で速度を少し上げるか、上位レベルに進みましょう。");
+
+      return { total, completed: completed.length, undelivered, prioAccuracy, replyAccuracy, averageTotal, phoneAccuracy, strengths, nextSteps, reviewRows };
+    }
+
+    // 処理済チャットを開き直したときの正誤と訂正文
+    function completedPanelText(chat, level) {
+      const prioText = chat.isPrioCorrect ? "優先度は正解です。" : `優先度は ${labels[chat.correctPrio]} が正解です。`;
+      let replyText;
+      if (chat.isReplyCorrect) replyText = "返信処理は正解です。";
+      else if (!chat.requiresReply) replyText = "返信せずに完了するのが正解です。";
+      else if (level === 1 && chat.correctOpt !== null) replyText = `正しい返信は「${chat.options[chat.correctOpt]}」です。`;
+      else replyText = `正しい返信は「${chat.reply}」です。`;
+      return { prioText, replyText };
+    }
+
+    // 結果画面「要確認タスク」の各列
+    function priorityResultText(chat) {
+      if (chat.status !== "completed") return `正解: ${labels[chat.correctPrio]}`;
+      return `${chat.isPrioCorrect ? "正解" : "不正解"} / 正解: ${labels[chat.correctPrio]} / 選択: ${labels[chat.selectedPrio]}`;
+    }
+
+    function replyResultText(chat) {
+      if (chat.status !== "completed") return chat.requiresReply ? "返信必要" : "返信不要";
+      return `${chat.isReplyCorrect ? "正解" : "不正解"} / ${chat.requiresReply ? "返信必要" : "返信不要"}`;
+    }
+
+    function csvHeader() {
+      return [
+        "レベル", "状態", "送信者", "メッセージ内容", "正解優先度", "選択優先度", "優先度正誤", "返信必要", "選択処理", "返信正誤",
+        "確認時間(秒)", "振り分け時間(秒)", "返信時間(秒)", "総処理時間(秒)", "制限時間(分)", "終了理由", "未着件数"
+      ];
+    }
+
+    // CSV の1行。session: { level, durationSec, endReason, undelivered }
+    function csvRow(chat, session) {
+      const level = session.level;
+      return [
+        `Level ${level}`,
+        labels[chat.status],
+        chat.sender,
+        chat.text,
+        labels[chat.correctPrio],
+        chat.selectedPrio ? labels[chat.selectedPrio] : "",
+        chat.isPrioCorrect === null ? "" : chat.isPrioCorrect ? "正解" : "不正解",
+        chat.requiresReply ? "必要" : "不要",
+        chat.selectedAction === "reply" ? "返信" : chat.selectedAction === "no_reply" ? "返信せず完了" : "",
+        chat.isReplyCorrect === null ? "" : chat.isReplyCorrect ? "正解" : "不正解",
+        chat.openedAt ? secondsBetween(chat.createdAt, chat.openedAt) : "",
+        chat.prioAt && chat.selectedPrio ? secondsBetween(chat.openedAt, chat.prioAt) : "",
+        chat.completedAt ? secondsBetween(chat.prioAt, chat.completedAt) : "",
+        chat.completedAt ? secondsBetween(chat.openedAt, chat.completedAt) : "",
+        level === 1 ? "" : String(Math.round(session.durationSec / 60)),
+        endReasonText(session.endReason),
+        level === 1 ? "0" : String(Math.max(0, session.undelivered || 0))
+      ];
+    }
+
+    // CSV の全行（受信順 = id 昇順。createdAt は一時停止の補正でずれるため並べ替えには使わない）
+    function csvRows(chats, session) {
+      return chats.slice().sort((a, b) => a.id - b.id).map((chat) => csvRow(chat, session));
+    }
+
+    return {
+      labels, normalize, commonPrefixLength, typingProgress, targetMarks, judge, judgePhone,
+      percent, average, formatStat, secondsBetween, formatTime,
+      levelSubtitle, endReasonText, resultSubtitle, summarize,
+      completedPanelText, priorityResultText, replyResultText, csvHeader, csvRow, csvRows
+    };
+  })();

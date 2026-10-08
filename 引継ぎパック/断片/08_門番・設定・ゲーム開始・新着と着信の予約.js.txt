@@ -1,0 +1,247 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1804〜2044（全 2732 行）
+区画: 08_門番・設定・ゲーム開始・新着と着信の予約 … 操作の門番（ダブルクリック対策）、設定の保存、startGame、createChat、新着・着信の間隔、時計
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  // ---- 操作の門番（原則: 画面が切り替わった直後は、切り替わる前の画面に向けた操作を受け付けない） ----
+  // 1. 画面が切り替わった（優先度↔返信パネルの差し替え、「返信せずに完了」の確認への切り替え、着信・停止画面の開閉）直後 POINTER_SETTLE_MS はマウス操作を無視する
+  //    （ダブルクリックの2回目が、同じ場所に現れた別のボタンに落ちるのを防ぐ）。
+  // 2. 優先度ボタン・「優先度を選び直す」・確認に切り替わる「返信せずに完了」をマウスで押した直後 SAME_SPOT_MS は、
+  //    同じ位置（SAME_SPOT_PX 以内）へのクリックを無視する（ゆっくりなダブルクリック）。
+  // 3. 着信画面の表示直後 KEY_SETTLE_MS はキー操作も無視する（入力中の Space/Enter の続きが届く唯一の場面）。着信画面が閉じれば解ける。
+  // 4. 別のチャットを開いたら、前のチャットでのパネル差し替えに対する窓（1・2）は閉じる（開いたパネルは利用者が今求めたもの。selectChat）。
+  // それ以外のキーボード操作は常に受け付ける（Enter がダブルクリックの2回目になることはない）。
+  // キーの長押し（自動リピート）は操作として扱わない（bindEvents の keydown で捨てる）。
+  const POINTER_SETTLE_MS = 400;
+  const SAME_SPOT_MS = 700;
+  const SAME_SPOT_PX = 24;
+  const KEY_SETTLE_MS = 500;
+  // scope: 切り替わった範囲。"panel" は操作パネルだけ（受信トレイのクリックは妨げない）、"all" は画面全体（着信・停止画面）。
+  const gate = { changedAt: 0, scope: "all", spot: null, keyLockedUntil: 0 };
+
+  function resetGate() {
+    gate.changedAt = 0;
+    gate.scope = "all";
+    gate.spot = null;
+    gate.keyLockedUntil = 0;
+  }
+
+  // 画面が切り替わったことを記録する。切り替えの原因がマウスクリックなら、その位置も覚える。
+  function markScreenChange(event, lockKeys, scope) {
+    gate.changedAt = Date.now();
+    gate.scope = scope || "all";
+    gate.spot = isPointerEvent(event) ? { x: event.clientX, y: event.clientY, at: gate.changedAt } : null;
+    // キーの締め出しは、締め出しを求めた画面（着信画面）が前面にある間だけ。別の切り替えが起きた時点で解ける。
+    gate.keyLockedUntil = lockKeys ? gate.changedAt + KEY_SETTLE_MS : 0;
+  }
+
+  // この操作を受け付けてよいか。event が無い／キーボード由来なら、キーの締め出し中でない限り受け付ける。
+  // area: 操作の場所。"inbox"（受信トレイ）は、操作パネルだけが切り替わった直後なら妨げない。
+  function accepts(event, area) {
+    const now = Date.now();
+    if (!isPointerEvent(event)) return now >= gate.keyLockedUntil;
+    if (now - gate.changedAt < POINTER_SETTLE_MS && !(area === "inbox" && gate.scope === "panel")) return false;
+    const spot = gate.spot;
+    if (spot && now - spot.at < SAME_SPOT_MS && Math.abs(event.clientX - spot.x) < SAME_SPOT_PX && Math.abs(event.clientY - spot.y) < SAME_SPOT_PX) return false;
+    return true;
+  }
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem("chatTypingTrainingSettings");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if ([300, 600, 900].includes(parsed.durationSec)) state.durationSec = parsed.durationSec;
+      state.comfortable = Boolean(parsed.comfortable);
+    } catch {
+      state.durationSec = 600;
+      state.comfortable = false;
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem("chatTypingTrainingSettings", JSON.stringify({
+        durationSec: state.durationSec,
+        comfortable: state.comfortable
+      }));
+    } catch {
+      // Shared classroom PCs can block localStorage. Training still works without saved settings.
+    }
+  }
+
+  function renderSettings() {
+    document.body.classList.toggle("comfortable", state.comfortable);
+    els.durationOptions.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("active", Number(button.dataset.duration) === state.durationSec);
+    });
+    els.displayOptions.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("active", (button.dataset.comfortable === "true") === state.comfortable);
+    });
+  }
+
+  function startGame(level) {
+    resetTimers();
+    state.level = level;
+    state.lastLevel = level;
+    state.timeRemaining = level === 1 ? 0 : state.durationSec;
+    state.endsAt = level === 1 ? 0 : Date.now() + state.durationSec * 1000;
+    state.pausedAt = 0;
+    state.chats = [];
+    state.phoneRecords = [];
+    state.currentPhone = null;
+    state.lastPhone = null;
+    state.activeId = null;
+    state.idSeed = 0;
+    state.gameOver = false;
+    state.paused = false;
+    state.nextPoolIndex = 0;
+    state.focusBeforePhone = null;
+    state.focusBeforePhoneChatId = null;
+    resetGate();
+    state.composing = false;
+    state.phoneDefer = 0;
+    state.chatDueAt = 0;
+    state.phoneDueAt = 0;
+    state.chatLeft = null;
+    state.phoneLeft = null;
+    state.finishPrompt = false;
+    state.endReason = "";
+    els.phoneModal.classList.remove("show");
+    els.pauseOverlay.classList.remove("show");
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    els.pauseBtn.textContent = "一時停止";
+    els.gameShell.inert = false;
+
+    if (level === 1) {
+      state.pool = [];
+      LEVEL1_DATA.forEach((data) => state.chats.push(createChat(data)));
+    } else {
+      state.pool = shuffle(TYPING_DATA);
+      for (let index = 0; index < Math.min(INITIAL_TYPING_CHATS, state.pool.length); index += 1) {
+        addNextTypingChat();
+      }
+      state.timerId = window.setInterval(gameTick, 1000);
+      scheduleNextChat();
+      if (level === 3) scheduleNextPhone();
+    }
+
+    els.sessionHeading.textContent = `Level ${level}`;
+    els.sessionSubtitle.textContent = getLevelSubtitle(level);
+    showScreen("game-screen");
+    clearSelection();
+    renderAll();
+  }
+
+  function getLevelSubtitle(level) {
+    return Logic.levelSubtitle(level, state.durationSec);
+  }
+
+  // 途中で終了した場合に、まだ届いていなかったチャットの数（Level 1 は 0 固定・負値は 0 にする正規化は Logic が行う）
+  function undeliveredCount() {
+    return state.pool.length - state.nextPoolIndex;
+  }
+
+  function createChat(data) {
+    return {
+      id: state.idSeed += 1,
+      sender: data.sender,
+      text: data.text,
+      correctPrio: data.prio,
+      options: data.options || [],
+      correctOpt: data.correctOpt,
+      reply: data.reply || "",
+      requiresReply: data.requiresReply,
+      status: "unread",
+      selectedPrio: null,
+      selectedReply: "",
+      selectedAction: "",
+      draft: "",
+      createdAt: Date.now(),
+      openedAt: null,
+      prioAt: null,
+      completedAt: null,
+      isPrioCorrect: null,
+      isReplyCorrect: null
+    };
+  }
+
+  function addNextTypingChat() {
+    if (state.nextPoolIndex >= state.pool.length) return;
+    const chat = createChat(state.pool[state.nextPoolIndex]);
+    state.nextPoolIndex += 1;
+    state.chats.unshift(chat);
+    if (document.getElementById("game-screen").classList.contains("active")) {
+      showToast("新しいチャットが届きました。");
+    }
+  }
+
+  function scheduleNextChat(delay) {
+    window.clearTimeout(state.chatTimerId);
+    state.chatTimerId = null;
+    if (state.gameOver || state.level === 1 || state.nextPoolIndex >= state.pool.length) return;
+    const wait = delay || typingChatInterval();
+    state.chatDueAt = Date.now() + wait;
+    state.chatTimerId = window.setTimeout(() => {
+      state.chatTimerId = null;
+      if (state.gameOver) return;
+      if (state.paused) {
+        scheduleNextChat(1200);
+        return;
+      }
+      addNextTypingChat();
+      renderSidebar();
+      updateMetrics();
+      scheduleNextChat();
+    }, wait);
+  }
+
+  // 残りのチャットを制限時間の約4分の3に均等配分する。
+  // 固定間隔だと10分・15分を選んでも3分程度で全件届き切ってしまうため。
+  function typingChatInterval() {
+    const remaining = Math.max(1, state.pool.length - INITIAL_TYPING_CHATS);
+    const base = Math.max(6000, Math.round((state.durationSec * 1000 * 0.75) / remaining));
+    return randomBetween(Math.round(base * 0.75), Math.round(base * 1.25));
+  }
+
+  function scheduleNextPhone(delay) {
+    window.clearTimeout(state.phoneTimerId);
+    state.phoneTimerId = null;
+    if (state.gameOver || state.level !== 3) return;
+    const wait = delay || phoneInterval();
+    state.phoneDueAt = Date.now() + wait;
+    state.phoneTimerId = window.setTimeout(() => {
+      state.phoneTimerId = null;
+      if (state.gameOver) return;
+      if (state.paused) {
+        scheduleNextPhone(1200);
+        return;
+      }
+      // IME で変換中（未確定）の文節があるときに着信すると、未確定の文字が確定されて入力欄に残る。少しだけ待つ。
+      if (state.composing && state.phoneDefer < 1500) {
+        state.phoneDefer += 300;
+        scheduleNextPhone(300);
+        return;
+      }
+      state.phoneDefer = 0;
+      showPhone();
+    }, wait);
+  }
+
+  // 電話は制限時間に応じて配分し、1セッションおよそ5回にする。
+  function phoneInterval() {
+    const base = Math.max(45000, Math.round((state.durationSec * 1000) / 5));
+    return randomBetween(Math.round(base * 0.75), Math.round(base * 1.25));
+  }
+
+  function gameTick() {
+    if (state.gameOver || state.paused) return;
+    // setInterval は裏タブで間引かれるため、残り時間は実時間から計算する。
+    state.timeRemaining = Math.max(0, Math.round((state.endsAt - Date.now()) / 1000));
+    updateMetrics();
+    if (state.timeRemaining <= 0) endGame("time");
+  }
+

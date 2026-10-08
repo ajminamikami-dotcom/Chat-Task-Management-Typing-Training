@@ -25,6 +25,13 @@ const SUITES = [
 const quick = !!process.env.QUICK;
 const only = process.env.ONLY ? process.env.ONLY.split(",") : null;
 const results = [];
+// 引継ぎパックの「断片」（本体の読み取り専用コピー）が本体と一致しているか。古ければ作り直す: node 引継ぎパック/断片/make-chunks.js
+const chunks = path.join(__dirname, "..", "引継ぎパック", "断片", "make-chunks.js");
+if (!only && fs.existsSync(chunks)) {
+  const r = spawnSync(process.execPath, [chunks, "--check"], { stdio: "inherit", env: process.env });
+  results.push({ name: "chunks-check", desc: "引継ぎパックの断片が本体と一致（古ければ make-chunks.js で作り直す）", code: r.status, sec: 0 });
+  console.log("");
+}
 for (const [name, desc, kind] of SUITES) {
   if (quick && kind === "long") continue;
   if (only && !only.some((o) => name.startsWith(o))) continue;

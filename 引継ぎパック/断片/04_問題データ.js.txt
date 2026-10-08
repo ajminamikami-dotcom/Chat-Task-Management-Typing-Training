@@ -1,0 +1,59 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1272〜1324（全 2732 行）
+区画: 04_問題データ … LEVEL1_DATA（Level 1 の 11 問）、TYPING_DATA（Level 2/3 の 20 問）、PHONE_DATA（電話 6 件）
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+<script>
+(() => {
+  "use strict";
+
+  const LEVEL1_DATA = [
+    { sender: "田中部長", text: "顧客からクレームが入った。至急状況を確認して折り返してくれ。", prio: "high", options: ["至急確認し、対応いたします。", "明日確認します。", "関係ありません。"], correctOpt: 0, requiresReply: true },
+    { sender: "システム通知", text: "【重要】サーバーAがダウンしました。復旧作業を開始してください。", prio: "high", options: ["原因調査を開始します。", "了解しました。後でやります。", "分かりません。"], correctOpt: 0, requiresReply: true },
+    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", options: ["承知いたしました。拝読します。", "詳しい資料を送ってください。", "配信を停止してください。"], correctOpt: null, requiresReply: false },
+    { sender: "総務部", text: "健康診断の希望日を今週末までに提出してください。", prio: "mid", options: ["今日中に行きます。", "期日までに提出いたします。", "提出しません。"], correctOpt: 1, requiresReply: true },
+    { sender: "同僚の佐藤", text: "お疲れ様！来週の飲み会来れそう？", prio: "low", options: ["至急対応します！", "お疲れ様です。参加します！", "業務に集中してください。"], correctOpt: 1, requiresReply: true },
+    { sender: "経理部", text: "先月の経費精算書類に不備があります。修正して再提出してください。", prio: "mid", options: ["経理部で修正しておいてください。", "後ほど確認し、修正いたします。", "間違っていません。"], correctOpt: 1, requiresReply: true },
+    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", options: ["読みました！", "感想をお送りします。", "次回のテーマを教えてください。"], correctOpt: null, requiresReply: false },
+    { sender: "営業の鈴木", text: "出張のお土産を買ってきたよ。休憩室に置いておきます。", prio: "low", options: ["ありがとうございます。後でいただきます。", "すぐ食べに行きます！", "いりません。"], correctOpt: 0, requiresReply: true },
+    { sender: "A社 担当者", text: "明日の会議の件ですが、開始時間を1時間遅らせることは可能でしょうか？", prio: "mid", options: ["問題ございません。変更承知いたしました。", "無理です。", "明日考えます。"], correctOpt: 0, requiresReply: true },
+    { sender: "受付", text: "重要顧客のC社様がアポイント無しでご来社されています。いかがいたしましょうか。", prio: "high", options: ["すぐに向かいます。", "追い返してください。", "会議中と伝えてください。"], correctOpt: 0, requiresReply: true },
+    { sender: "全社通知", text: "ビルの法定点検のため、今週末は全館停電となります。金曜の退社時はPCの電源を必ず切ってください。（返信不要）", prio: "mid", options: ["承知いたしました。", "その日は出社します。", "停電の時間帯を教えてください。"], correctOpt: null, requiresReply: false }
+  ];
+
+  const TYPING_DATA = [
+    { sender: "顧客サポート", text: "A社様よりシステムにログインできないと重大なクレームが入っています。至急対応をお願いします。", prio: "high", reply: "至急状況を確認し、対応いたします。", requiresReply: true },
+    { sender: "経理部", text: "本日締切の振込手続きが1件漏れています。15時までに処理が必要です。", prio: "high", reply: "申し訳ございません。すぐに処理します。", requiresReply: true },
+    { sender: "サーバー監視", text: "【障害アラート】メインデータベースの応答がありません。至急対応してください。", prio: "high", reply: "直ちに原因調査を開始します。", requiresReply: true },
+    { sender: "営業推進部", text: "業界ニュースクリッピングの配信です（返信不要）", prio: "low", reply: "拝読いたします。", requiresReply: false },
+    { sender: "B社 担当者", text: "先ほど納品された製品ですが、数が足りていません。至急確認をお願いします。", prio: "high", reply: "申し訳ございません。至急確認いたします。", requiresReply: true },
+    { sender: "受付", text: "重要顧客のE社様がトラブルの件でお怒りの様子でご来社されています。いかがいたしましょうか。", prio: "high", reply: "すぐにお詫びに向かいます。", requiresReply: true },
+    { sender: "全社通知", text: "コンプライアンス委員からの今月の標語です。（返信不要）", prio: "low", reply: "確認いたしました。", requiresReply: false },
+    { sender: "総務部 施設担当", text: "来月のオフィスレイアウト変更に伴う座席希望アンケートを金曜までに提出してください。", prio: "mid", reply: "承知いたしました。期日までに提出します。", requiresReply: true },
+    { sender: "人事部", text: "【リマインド】コンプライアンス研修の受講期限が来週末に迫っています。期限までに受講してください。", prio: "mid", reply: "承知いたしました。受講いたします。", requiresReply: true },
+    { sender: "IT部門", text: "パスワードの定期変更期限が近づいています。5日以内に変更してください。", prio: "mid", reply: "承知いたしました。変更手続きを行います。", requiresReply: true },
+    { sender: "営業事務", text: "今月の売上見込データの入力をお願いします。水曜が締め切りです。", prio: "mid", reply: "承知いたしました。期日までに入力します。", requiresReply: true },
+    { sender: "総務部 防災担当", text: "防災訓練のお知らせです。来月15日の14時から実施します。参加可否を今週中にご返信ください。", prio: "mid", reply: "承知いたしました。参加いたします。", requiresReply: true },
+    { sender: "社内広報", text: "社長ブログが更新されました。今週のテーマは「読書の秋」です。", prio: "low", reply: "お知らせありがとうございます。", requiresReply: false },
+    { sender: "営業の吉田", text: "取引先からお中元のメロンが届きました。休憩室で切り分けます。", prio: "low", reply: "ありがとうございます。後でいただきます。", requiresReply: true },
+    { sender: "システム通知", text: "メールボックスの容量が80%に達しました。急ぎではありませんので、手すきの際に不要なメールを削除してください。", prio: "low", reply: "確認いたしました。", requiresReply: true },
+    { sender: "労働組合", text: "組合費の使い道に関する意見募集ボックスを設置しました。（返信不要）", prio: "low", reply: "承知いたしました。", requiresReply: false },
+    { sender: "食堂", text: "今週のスペシャルメニューはカツカレーです！（返信不要）", prio: "low", reply: "美味しそうですね。", requiresReply: false },
+    { sender: "田中部長", text: "明日の会議は1時間遅らせる。資料の修正は不要。（返信不要）", prio: "mid", reply: "承知いたしました。", requiresReply: false },
+    { sender: "品質管理", text: "検査記録に未入力が1件あります。今週中に確認をお願いします。", prio: "mid", reply: "承知いたしました。今週中に確認します。", requiresReply: true },
+    { sender: "広報チーム", text: "社内報の写真募集を開始しました。任意参加です。（返信不要）", prio: "low", reply: "確認しました。", requiresReply: false }
+  ];
+
+  // Level 2・3 の開始時にあらかじめ受信トレイへ入れておく件数
+  const INITIAL_TYPING_CHATS = 4;
+
+  const PHONE_DATA = [
+    { caller: "重要顧客 A社 取締役", isEmergency: true },
+    { caller: "システム障害監視センター", isEmergency: true },
+    { caller: "社長", isEmergency: true },
+    { caller: "不動産投資の営業", isEmergency: false },
+    { caller: "別部署の同僚 飲み会の誘い", isEmergency: false },
+    { caller: "オフィス用品のセールス", isEmergency: false }
+  ];
+

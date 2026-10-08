@@ -1,0 +1,225 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 2512〜2730（全 2732 行）
+区画: 11_終了・結果画面・CSV・補助関数 … endGame、showResults、要確認表、CSV ダウンロード、小さな補助関数
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  function endGame(reason) {
+    if (state.gameOver) return;
+    state.gameOver = true;
+    state.endReason = reason;
+    resetTimers();
+    els.phoneModal.classList.remove("show");
+    els.pauseOverlay.classList.remove("show");
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    state.finishPrompt = false;
+    state.paused = false;
+    els.gameShell.inert = false;
+    els.pauseBtn.textContent = "一時停止";
+    hideToast();
+    showResults(reason);
+  }
+
+  function showResults(reason) {
+    const summary = Logic.summarize({ level: state.level, chats: state.chats, phoneRecords: state.phoneRecords, undelivered: undeliveredCount() });
+    els.resultSubtitle.textContent = Logic.resultSubtitle(state.level, state.durationSec, reason, summary.undelivered);
+    els.scoreGrid.innerHTML = `
+      ${scoreCard("完了", `${summary.completed}/${summary.total}`, "件")}
+      ${scoreCard("優先度", summary.prioAccuracy, "%")}
+      ${scoreCard("返信", summary.replyAccuracy, "%")}
+      ${scoreCard("平均処理", summary.averageTotal, "秒")}
+      ${state.level === 3 ? scoreCard("電話判断", summary.phoneAccuracy, "%") : ""}
+    `;
+
+    els.insightGrid.innerHTML = `
+      <section class="panel">
+        <div class="panel-head"><h2>よかった点</h2></div>
+        <div class="panel-body"><ul class="insight-list">${summary.strengths.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>次の練習</h2></div>
+        <div class="panel-body"><ul class="insight-list">${summary.nextSteps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      </section>
+    `;
+
+    renderReviewTable(summary.reviewRows);
+    showScreen("result-screen");
+  }
+
+  function renderReviewTable(rows) {
+    if (!rows.length) {
+      els.reviewTable.innerHTML = "<p>要確認タスクはありません。</p>";
+      return;
+    }
+
+    els.reviewTable.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>送信者</th>
+            <th>状態</th>
+            <th>優先度</th>
+            <th>返信</th>
+            <th>本文</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((chat) => `
+            <tr>
+              <td>${escapeHtml(chat.sender)}</td>
+              <td>${escapeHtml(labels[chat.status])}</td>
+              <td>${escapeHtml(Logic.priorityResultText(chat))}</td>
+              <td>${escapeHtml(Logic.replyResultText(chat))}</td>
+              <td>${escapeHtml(chat.text)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function scoreCard(label, value, unit) {
+    const text = formatStat(value);
+    const suffix = text === "-" ? "" : `<small style="font-size:14px;"> ${escapeHtml(unit)}</small>`;
+    return `
+      <div class="score-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(text)}${suffix}</strong>
+      </div>
+    `;
+  }
+
+  function updateMetrics() {
+    const completed = state.chats.filter((chat) => chat.status === "completed").length;
+    const unread = state.chats.filter((chat) => chat.status === "unread").length;
+    const pending = state.chats.filter((chat) => chat.status === "unreplied").length;
+    const open = state.chats.length - completed;
+    els.timer.textContent = state.level === 1 ? "全件" : formatTime(state.timeRemaining);
+    els.doneCount.textContent = completed;
+    els.openCount.textContent = open;
+    els.unreadCount.textContent = `${labels.unread} ${unread}`;
+    els.pendingCount.textContent = `${labels.unreplied} ${pending}`;
+    els.completedCount.textContent = `${labels.completed} ${completed}`;
+  }
+
+  function resetTimers() {
+    window.clearInterval(state.timerId);
+    window.clearTimeout(state.chatTimerId);
+    window.clearTimeout(state.phoneTimerId);
+    state.timerId = null;
+    state.chatTimerId = null;
+    state.phoneTimerId = null;
+  }
+
+  function showScreen(id) {
+    if (id === "start-screen") {
+      resetTimers();
+      state.gameOver = true;
+      state.paused = false;
+      state.finishPrompt = false;
+      els.phoneModal.classList.remove("show");
+      els.pauseOverlay.classList.remove("show");
+      els.finishConfirm.hidden = true;
+      els.pauseNormal.hidden = false;
+      els.gameShell.inert = false;
+      hideToast();
+    }
+    els.screens.forEach((screen) => screen.classList.toggle("active", screen.id === id));
+    renderSettings();
+  }
+
+  function downloadCSV() {
+    const session = { level: state.level, durationSec: state.durationSec, endReason: state.endReason, undelivered: undeliveredCount() };
+    const rows = Logic.csvRows(state.chats, session);
+    if (rows.length === 0) {
+      showToast("出力するデータがありません。");
+      return;
+    }
+    const header = Logic.csvHeader();
+    const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    // toISOString はUTCなので、日本時間の午前中は前日の日付になってしまう。
+    const now = new Date();
+    const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    // 同じ日に複数回行っても上書きにならないよう、時刻も付ける。
+    const time = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    link.href = url;
+    link.download = `task_training_result_L${state.level}_${date}_${time}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function getActiveChat() {
+    return state.chats.find((chat) => chat.id === state.activeId) || null;
+  }
+
+  // お手本の色付け（Logic.targetMarks を HTML にする）
+  function renderTarget(chat) {
+    const { marks, extra } = Logic.targetMarks(chat.draft, chat.reply);
+    const body = marks.map((mark) => {
+      if (mark.state === "space") return escapeHtml(mark.char);
+      if (mark.state === "plain") return `<span>${escapeHtml(mark.char)}</span>`;
+      return `<span class="${mark.state}">${escapeHtml(mark.char)}</span>`;
+    }).join("");
+    return body + (extra ? `<span class="wrong">${escapeHtml(extra)}</span>` : "");
+  }
+
+  function typingProgress(chat) {
+    return Logic.typingProgress(chat.draft, chat.reply);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function csvEscape(value) {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  function formatElapsed(timestamp) {
+    const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if (seconds < 60) return `${seconds}秒前`;
+    return `${Math.floor(seconds / 60)}分前`;
+  }
+
+  function randomBetween(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function shuffle(items) {
+    const copy = [...items];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomBetween(0, index);
+      [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+    }
+    return copy;
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    window.clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.classList.add("show");
+    toastTimer = window.setTimeout(() => els.toast.classList.remove("show"), 2400);
+  }
+
+  function hideToast() {
+    window.clearTimeout(toastTimer);
+    els.toast.classList.remove("show");
+  }
+
+  init();
+})();
+</script>

@@ -1,0 +1,326 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 2045〜2364（全 2732 行）
+区画: 09_描画（受信トレイ・チャット・パネル） … 受信トレイ、チャット本文、優先度パネル、返信パネル（入力・選択肢）、処理済パネル
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  function renderAll() {
+    renderSidebar();
+    renderActiveChat();
+    updateMetrics();
+  }
+
+  function renderSidebar() {
+    const focused = document.activeElement;
+    const focusedChatId = focused && focused.dataset && focused.dataset.chatId
+      ? Number(focused.dataset.chatId) : null;
+    if (state.chats.length === 0) {
+      els.chatList.innerHTML = '<div class="empty-state">チャットはまだありません。</div>';
+      return;
+    }
+
+    els.chatList.innerHTML = state.chats.map((chat) => {
+      const badgeClass = chat.status === "completed" ? "completed" : chat.status === "unreplied" ? chat.selectedPrio : "unread";
+      const active = chat.id === state.activeId ? " active" : "";
+      const statusClass = chat.status === "completed" ? " completed" : chat.status === "unread" ? " unread" : "";
+      const statusText = chat.status === "unreplied" ? `${labels.unreplied} ${labels[chat.selectedPrio]}` : labels[chat.status];
+      return `
+        <button class="chat-item${active}${statusClass}" type="button" data-chat-id="${chat.id}">
+          <span class="chat-row">
+            <span class="sender">${escapeHtml(chat.sender)}</span>
+            <span class="badge ${badgeClass}">${escapeHtml(statusText)}</span>
+          </span>
+          <span class="preview">${escapeHtml(chat.text)}</span>
+        </button>
+      `;
+    }).join("");
+
+    els.chatList.querySelectorAll("[data-chat-id]").forEach((button) => {
+      button.addEventListener("click", (event) => selectChat(Number(button.dataset.chatId), event));
+    });
+
+    // 再描画で受信トレイ内のフォーカスが失われると、キーボード操作の人は
+    // 新着のたびに位置を見失う。同じチャットのボタンにフォーカスを戻す。
+    if (focusedChatId !== null) {
+      const again = els.chatList.querySelector(`[data-chat-id="${focusedChatId}"]`);
+      if (again) again.focus();
+    }
+  }
+
+  function selectChat(id, event) {
+    if (state.gameOver || state.paused) return;
+    if (!accepts(event, "inbox")) return;
+    const chat = state.chats.find((item) => item.id === id);
+    if (!chat) return;
+    // 別のチャットを開いたら、前のチャットでのパネル差し替えに対する窓は閉じる（開いたパネルは利用者が今求めたもの）。
+    if (gate.scope === "panel" && state.activeId !== id) { gate.changedAt = 0; gate.spot = null; }
+    state.activeId = id;
+    if (!chat.openedAt) chat.openedAt = Date.now();
+    renderAll();
+  }
+
+  function clearSelection() {
+    state.activeId = null;
+    els.chatHeading.textContent = "チャットを選択してください";
+    els.chatBadge.textContent = "待機";
+    els.chatBadge.className = "badge neutral";
+    els.messageStage.innerHTML = '<div class="empty-state">左の受信トレイから未処理または保留中のメッセージを選択してください。</div>';
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>処理ステップ</h3>
+        <p class="feedback-line">チャットを選ぶと操作パネルが表示されます。</p>
+      </section>
+    `;
+  }
+
+  function renderActiveChat() {
+    const chat = getActiveChat();
+    if (!chat) {
+      clearSelection();
+      return;
+    }
+
+    els.chatHeading.textContent = chat.sender;
+    els.chatBadge.textContent = chat.status === "unreplied" ? `${labels.unreplied} ${labels[chat.selectedPrio]}` : labels[chat.status];
+    els.chatBadge.className = `badge ${chat.status === "unreplied" ? chat.selectedPrio : "neutral"}`;
+    els.messageStage.innerHTML = `
+      <article class="message-bubble">
+        <div class="message-meta">${formatElapsed(chat.createdAt)} に受信</div>
+        <div>${escapeHtml(chat.text)}</div>
+      </article>
+    `;
+
+    if (chat.status === "completed") {
+      renderCompletedPanel(chat);
+    } else if (chat.status === "unreplied") {
+      renderReplyPanel(chat);
+    } else {
+      renderPriorityPanel(chat);
+    }
+  }
+
+  function renderPriorityPanel(chat) {
+    // 優先度パネルが（再び）表示されたら、「同じ位置への再クリック」規則の対象は消える
+    gate.spot = null;
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>STEP 1 優先度</h3>
+        <div class="priority-actions">
+          <button class="priority-btn high" type="button" data-prio="high">高 至急対応</button>
+          <button class="priority-btn mid" type="button" data-prio="mid">中 期限内に対応</button>
+          <button class="priority-btn low" type="button" data-prio="low">低 急がない</button>
+        </div>
+      </section>
+      <section class="step">
+        <p class="feedback-line">メッセージ本文の期限、影響範囲、相手を見て判断します。（キーボード: Alt+1 高 / Alt+2 中 / Alt+3 低）</p>
+      </section>
+    `;
+
+    els.taskPanel.querySelectorAll("[data-prio]").forEach((button) => {
+      button.addEventListener("click", (event) => setPriority(button.dataset.prio, event));
+    });
+  }
+
+  function setPriority(prio, event) {
+    if (state.gameOver || state.paused) return;
+    if (!accepts(event)) return;
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+    chat.selectedPrio = prio;
+    chat.status = "unreplied";
+    // 選び直しても最初に判断した時刻を保つ（CSV の振り分け時間／返信時間が付け替わらない）。
+    if (!chat.prioAt) chat.prioAt = Date.now();
+    // 優先度パネルが返信パネルに差し替わる（同じ場所に別のボタンが現れる）。
+    const pointer = isPointerEvent(event);
+    if (pointer) markScreenChange(event, false, "panel");
+    renderAll();
+    if (state.level === 1) {
+      const first = els.taskPanel.querySelector(".choice-btn");
+      if (first && !pointer) first.focus();
+    } else {
+      focusTypingInput();
+    }
+  }
+
+  // 優先度の選び直し。入力途中の下書きと最初の判断時刻は保持する。
+  function reopenPriority(event) {
+    if (state.gameOver || state.paused) return;
+    if (!accepts(event)) return;
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+    chat.status = "unread";
+    chat.selectedPrio = null;
+    renderAll();
+    // 返信パネルが優先度パネルに差し替わる（同じ場所に優先度ボタンが現れる。ゆったり表示ではこのボタンの真下が「低」）。
+    // renderAll の後に記録するのは、renderPriorityPanel が消す「同じ位置」の規則をここでは残すため（ゆっくりなダブルクリックの 2 回目も捨てる）。
+    if (isPointerEvent(event)) markScreenChange(event, false, "panel");
+  }
+
+  function updateTypingProgress(chat) {
+    const progress = typingProgress(chat);
+    
+    const targetText = document.getElementById("target-text");
+    if (targetText) targetText.innerHTML = renderTarget(chat);
+
+    const input = document.getElementById("typing-input");
+    if (input) {
+      if (progress.done) {
+        input.classList.add("success");
+      } else {
+        input.classList.remove("success");
+      }
+    }
+
+    const progressFill = document.querySelector(".progress-fill");
+    if (progressFill) progressFill.style.width = `${progress.percent}%`;
+
+    // disabled にすると Tab 順から外れて隣の「返信せずに完了」に着地するため、aria-disabled で見た目だけ無効にし、押されたら理由を伝える。
+    const submitBtn = document.getElementById("submit-reply-btn");
+    if (submitBtn) submitBtn.setAttribute("aria-disabled", progress.done ? "false" : "true");
+
+    const feedback = document.getElementById("typing-feedback");
+    if (feedback) feedback.textContent = progress.feedback;
+  }
+
+  function renderReplyPanel(chat) {
+    state.composing = false;
+    if (state.level === 1) {
+      const options = chat.options.map((option, index) => `
+        <button class="choice-btn" type="button" data-option="${index}">${escapeHtml(option)}</button>
+      `).join("");
+      els.taskPanel.innerHTML = `
+        <section class="step">
+          <h3>STEP 2 返信処理</h3>
+          <div class="choice-list">${options}</div>
+        </section>
+        <section class="step">
+          <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
+          <p class="feedback-line">返信不要の連絡は、このボタンで処理します。</p>
+        </section>
+        <section class="step">
+          <button class="text-btn" type="button" id="redo-prio-btn">優先度を選び直す</button>
+        </section>
+      `;
+      els.taskPanel.querySelectorAll("[data-option]").forEach((button) => {
+        button.addEventListener("click", (event) => finishChat({
+          action: "reply",
+          selectedReply: chat.options[Number(button.dataset.option)] || "",
+          optionIndex: Number(button.dataset.option)
+        }, event));
+      });
+      els.taskPanel.querySelector("#no-reply-btn").addEventListener("click", (event) => finishChat({ action: "no_reply", selectedReply: "" }, event));
+      els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", (event) => reopenPriority(event));
+      return;
+    }
+
+    const progress = typingProgress(chat);
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>STEP 2 返信処理</h3>
+        <div class="reply-area">
+          <div class="target-text" id="target-text">${renderTarget(chat)}</div>
+          <input class="typing-input${progress.done ? " success" : ""}" id="typing-input" type="text" value="${escapeHtml(chat.draft)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="上の文章を入力してください">
+          <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress.percent}%"></div></div>
+          <div class="action-row">
+            <button class="primary-btn" type="button" id="submit-reply-btn" aria-disabled="${progress.done ? "false" : "true"}">入力して返信</button>
+            <button class="secondary-btn" type="button" id="no-reply-btn">返信せずに完了</button>
+          </div>
+          <p class="feedback-line" id="typing-feedback">${progress.feedback}</p>
+        </div>
+      </section>
+      <section class="step">
+        <button class="text-btn" type="button" id="redo-prio-btn">優先度を選び直す</button>
+      </section>
+    `;
+
+    const input = els.taskPanel.querySelector("#typing-input");
+    const noReplyBtn = els.taskPanel.querySelector("#no-reply-btn");
+    let noReplyTimer = null;
+    const resetNoReplyConfirm = () => {
+      window.clearTimeout(noReplyTimer);
+      if (noReplyBtn.dataset.confirm) {
+        delete noReplyBtn.dataset.confirm;
+        noReplyBtn.textContent = "返信せずに完了";
+      }
+    };
+
+    // IME の変換中（未確定）は、お手本の正誤表示を更新しない（未確定のひらがなを「誤り」と見せない）。
+    input.addEventListener("compositionstart", () => { state.composing = true; });
+    input.addEventListener("compositionend", () => {
+      state.composing = false;
+      chat.draft = input.value;
+      updateTypingProgress(chat);
+    });
+    input.addEventListener("blur", () => { state.composing = false; });
+    input.addEventListener("input", (event) => {
+      chat.draft = input.value;
+      resetNoReplyConfirm();
+      if (event.isComposing || state.composing) return;
+      updateTypingProgress(chat);
+    });
+    input.addEventListener("paste", blockTextTransfer);
+    input.addEventListener("drop", blockTextTransfer);
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      // IME の変換確定の Enter（isComposing / keyCode 229）と長押しのリピートは送信に使わない
+      if (event.isComposing || event.keyCode === 229 || event.repeat) return;
+      event.preventDefault();
+      if (typingProgress(chat).done) finishChat({ action: "reply", selectedReply: chat.draft }, event);
+    });
+    els.taskPanel.querySelector("#submit-reply-btn").addEventListener("click", (event) => {
+      if (!accepts(event)) return;
+      if (!typingProgress(chat).done) {
+        showToast("お手本と一致していません。赤い文字の位置から直してください。");
+        focusTypingInput(true);
+        return;
+      }
+      finishChat({ action: "reply", selectedReply: chat.draft }, event);
+    });
+    noReplyBtn.addEventListener("click", (event) => {
+      if (!accepts(event)) return;
+      // 入力途中の文章があるのに「返信せずに完了」が押されたときは、誤クリックや Tab の着地による誤完了を防ぐため、もう一度押してもらう。
+      if (normalize(chat.draft) && noReplyBtn.dataset.confirm !== "1") {
+        noReplyBtn.dataset.confirm = "1";
+        noReplyBtn.textContent = "入力途中です。送らずに完了するならもう一度押す";
+        // ボタンの意味が「確認」に切り替わった。ダブルクリックの 2 回目を確認の押下として受け付けない。
+        if (isPointerEvent(event)) markScreenChange(event, false, "panel");
+        noReplyTimer = window.setTimeout(resetNoReplyConfirm, 4000);
+        return;
+      }
+      resetNoReplyConfirm();
+      finishChat({ action: "no_reply", selectedReply: "" }, event);
+    });
+    els.taskPanel.querySelector("#redo-prio-btn").addEventListener("click", (event) => reopenPriority(event));
+    focusTypingInput(true);
+  }
+
+  function renderCompletedPanel(chat) {
+    const { prioText, replyText } = Logic.completedPanelText(chat, state.level);
+    els.taskPanel.innerHTML = `
+      <section class="step">
+        <h3>処理済</h3>
+        <p class="feedback-line">${escapeHtml(prioText)}</p>
+        <p class="feedback-line">${escapeHtml(replyText)}</p>
+      </section>
+    `;
+  }
+
+  function focusTypingInput(keepCursor) {
+    window.requestAnimationFrame(() => {
+      // 直前に着信画面や停止画面が出ていたら、背面の入力欄にフォーカスを戻さない。
+      if (state.paused || els.phoneModal.classList.contains("show")) return;
+      const input = document.getElementById("typing-input");
+      if (!input) return;
+      input.focus();
+      if (keepCursor) {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    });
+  }
+
+  function blockTextTransfer(event) {
+    event.preventDefault();
+    showToast("コピー、貼り付け、ドラッグ入力は使えません。");
+  }
+

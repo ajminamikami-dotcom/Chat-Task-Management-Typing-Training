@@ -1,0 +1,194 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1616〜1803（全 2732 行）
+区画: 07_state・初期化・キー操作 … state（進行状態）、init、bindEvents（ボタン・キーボード・Tab の閉じ込め）、フォーカス移動
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  /* @@LOGIC_END */
+
+  const labels = Logic.labels;
+  const { normalize, commonPrefixLength, percent, average, formatStat, secondsBetween, formatTime } = Logic;
+
+  const state = {
+    level: 1,
+    durationSec: 600,
+    comfortable: false,
+    timeRemaining: 0,
+    chats: [],
+    pool: [],
+    nextPoolIndex: 0,
+    activeId: null,
+    idSeed: 0,
+    phoneRecords: [],
+    lastPhone: null,
+    focusBeforePhone: null,
+    focusBeforePhoneChatId: null,
+    composing: false,
+    phoneDefer: 0,
+    chatDueAt: 0,
+    phoneDueAt: 0,
+    chatLeft: null,
+    phoneLeft: null,
+    finishPrompt: false,
+    endReason: "",
+    endsAt: 0,
+    pausedAt: 0,
+    currentPhone: null,
+    paused: false,
+    gameOver: false,
+    timerId: null,
+    chatTimerId: null,
+    phoneTimerId: null,
+    lastLevel: 1
+  };
+
+  function init() {
+    els.level1Count.textContent = `${LEVEL1_DATA.length}問`;
+    loadSettings();
+    bindEvents();
+    renderSettings();
+  }
+
+  function bindEvents() {
+    els.startButtons.forEach((button) => {
+      button.addEventListener("click", () => startGame(Number(button.dataset.startLevel)));
+    });
+
+    els.durationOptions.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-duration]");
+      if (!button) return;
+      state.durationSec = Number(button.dataset.duration);
+      saveSettings();
+      renderSettings();
+    });
+
+    els.displayOptions.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-comfortable]");
+      if (!button) return;
+      state.comfortable = button.dataset.comfortable === "true";
+      saveSettings();
+      renderSettings();
+    });
+
+    // ヘッダーの一時停止は常に受け付ける（切り替わった画面の上に重なることがない）。
+    els.pauseBtn.addEventListener("click", () => togglePause());
+    // 停止画面の「再開」と着信画面の「一時停止」は互いの位置に重なるため門番を通す（キーボード起動は常に受け付ける）。
+    els.resumeBtn.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });
+    els.phonePause.addEventListener("click", (event) => { if (!accepts(event)) return; togglePause(); });
+    // 「終了」は誤クリック1回で訓練が打ち切られないよう、一時停止したうえで確認する。
+    els.finishBtn.addEventListener("click", openFinishConfirm);
+    els.finishConfirmBtn.addEventListener("click", () => endGame("manual"));
+    els.finishCancelBtn.addEventListener("click", closeFinishConfirm);
+    els.answerPhone.addEventListener("click", (event) => handlePhone(true, event));
+    els.ignorePhone.addEventListener("click", (event) => handlePhone(false, event));
+    els.downloadCsv.addEventListener("click", downloadCSV);
+    els.retry.addEventListener("click", () => startGame(state.lastLevel));
+    els.menu.addEventListener("click", () => showScreen("start-screen"));
+
+    // セッション中や結果画面で F5・タブ閉じ・戻るをすると進行や結果が黙って消えるため、ブラウザの確認を出す。
+    window.addEventListener("beforeunload", (event) => {
+      if (document.getElementById("start-screen").classList.contains("active")) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (!document.getElementById("game-screen").classList.contains("active")) return;
+
+      // キーの長押し（自動リピート）でボタンが連打されると、着信の応答や完了が本人の判断なしに確定する。
+      if (event.repeat && (event.key === "Enter" || event.key === " " || event.key === "Escape")) {
+        if (event.target && event.target.tagName === "BUTTON") event.preventDefault();
+        return;
+      }
+
+      // 着信画面・一時停止画面の表示中は、Tab がその画面の中だけを循環するようにする（背面へ抜けない）。
+      if (event.key === "Tab") {
+        let trap = null;
+        if (state.paused) {
+          trap = Array.from(els.pauseOverlay.querySelectorAll("button")).filter((button) => button.offsetParent !== null);
+        } else if (els.phoneModal.classList.contains("show")) {
+          trap = [els.answerPhone, els.ignorePhone, els.phonePause];
+        }
+        if (trap && trap.length) {
+          event.preventDefault();
+          cycleFocus(trap, event.shiftKey);
+          return;
+        }
+      }
+
+      if (event.key === "Escape") {
+        if (state.finishPrompt) {
+          closeFinishConfirm();
+          return;
+        }
+        // IMEの変換取り消しで Esc を押すため、入力欄では一時停止しない（停止中の再開は常に可能）。
+        // 着信中でも一時停止できるようにする（配慮機能はどの場面からも到達できること）。
+        const target = event.target;
+        if (state.paused || !target || target.id !== "typing-input") togglePause();
+        return;
+      }
+
+      if (event.altKey && ["1", "2", "3"].includes(event.key)) {
+        if (state.paused || els.phoneModal.classList.contains("show")) return;
+        const prio = { "1": "high", "2": "mid", "3": "low" }[event.key];
+        const chat = getActiveChat();
+        if (chat && chat.status === "unread") setPriority(prio);
+      }
+    });
+  }
+
+  function cycleFocus(items, backwards) {
+    const current = items.indexOf(document.activeElement);
+    let next;
+    if (current < 0) next = backwards ? items.length - 1 : 0;
+    else if (backwards) next = current === 0 ? items.length - 1 : current - 1;
+    else next = current === items.length - 1 ? 0 : current + 1;
+    items[next].focus();
+  }
+
+  // 着信中・一時停止中は背面の画面を不活性にし、クリックも Tab も届かないようにする。
+  function setShellInert() {
+    els.gameShell.inert = state.paused || els.phoneModal.classList.contains("show");
+  }
+
+  function openFinishConfirm() {
+    if (state.gameOver || state.finishPrompt) return;
+    state.finishPrompt = true;
+    if (!state.paused) togglePause();
+    els.pauseNormal.hidden = true;
+    els.finishConfirm.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "finish-title");
+    els.finishCancelBtn.focus();
+  }
+
+  function closeFinishConfirm() {
+    if (!state.finishPrompt) return;
+    state.finishPrompt = false;
+    els.finishConfirm.hidden = true;
+    els.pauseNormal.hidden = false;
+    els.pauseOverlay.setAttribute("aria-labelledby", "pause-title");
+    if (state.paused) togglePause();
+  }
+
+  // 完了や電話応答のあと、フォーカスを次の未完了チャットへ移す（body に落ちると Tab が「終了」に飛ぶ）。
+  function focusNextOpenChat() {
+    const next = els.chatList.querySelector(".chat-item:not(.completed)");
+    if (next) next.focus();
+    else els.inboxTitle.focus();
+  }
+
+  // 再開・着信終了のあとに作業位置へ戻す。入力欄 → 開いているチャット → 先頭の未完了 → 一時停止ボタン。
+  function restoreWorkFocus() {
+    if (document.getElementById("typing-input")) {
+      focusTypingInput(true);
+      return;
+    }
+    const target = els.chatList.querySelector(".chat-item.active") || els.chatList.querySelector(".chat-item:not(.completed)");
+    if (target) target.focus();
+    else els.pauseBtn.focus();
+  }
+
+  function isPointerEvent(event) {
+    return Boolean(event && (event.clientX || event.clientY));
+  }
+

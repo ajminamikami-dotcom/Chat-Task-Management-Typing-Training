@@ -1,0 +1,51 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1325〜1369（全 2732 行）
+区画: 05_els（画面部品の参照） … id → 要素の対応表
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  const els = {
+    screens: Array.from(document.querySelectorAll(".screen")),
+    startButtons: Array.from(document.querySelectorAll("[data-start-level]")),
+    durationOptions: document.getElementById("duration-options"),
+    displayOptions: document.getElementById("display-options"),
+    level1Count: document.getElementById("level1-count"),
+    sessionHeading: document.getElementById("session-heading"),
+    sessionSubtitle: document.getElementById("session-subtitle"),
+    timer: document.getElementById("timer"),
+    doneCount: document.getElementById("done-count"),
+    openCount: document.getElementById("open-count"),
+    unreadCount: document.getElementById("unread-count"),
+    pendingCount: document.getElementById("pending-count"),
+    completedCount: document.getElementById("completed-count"),
+    chatList: document.getElementById("chat-list"),
+    chatHeading: document.getElementById("chat-heading"),
+    chatBadge: document.getElementById("chat-status-badge"),
+    messageStage: document.getElementById("message-stage"),
+    taskPanel: document.getElementById("task-panel-content"),
+    pauseBtn: document.getElementById("pause-btn"),
+    finishBtn: document.getElementById("finish-btn"),
+    pauseOverlay: document.getElementById("pause-overlay"),
+    pauseNormal: document.getElementById("pause-normal"),
+    resumeBtn: document.getElementById("resume-btn"),
+    finishConfirm: document.getElementById("finish-confirm"),
+    finishConfirmBtn: document.getElementById("finish-confirm-btn"),
+    finishCancelBtn: document.getElementById("finish-cancel-btn"),
+    phoneModal: document.getElementById("phone-modal"),
+    phoneCard: document.getElementById("phone-card"),
+    callerName: document.getElementById("caller-name"),
+    answerPhone: document.getElementById("answer-phone-btn"),
+    ignorePhone: document.getElementById("ignore-phone-btn"),
+    phonePause: document.getElementById("phone-pause-btn"),
+    inboxTitle: document.getElementById("inbox-title"),
+    gameShell: document.querySelector(".game-shell"),
+    toast: document.getElementById("toast"),
+    resultSubtitle: document.getElementById("result-subtitle"),
+    scoreGrid: document.getElementById("score-grid"),
+    insightGrid: document.getElementById("insight-grid"),
+    reviewTable: document.getElementById("review-table"),
+    downloadCsv: document.getElementById("download-csv-btn"),
+    retry: document.getElementById("retry-btn"),
+    menu: document.getElementById("menu-btn")
+  };
+

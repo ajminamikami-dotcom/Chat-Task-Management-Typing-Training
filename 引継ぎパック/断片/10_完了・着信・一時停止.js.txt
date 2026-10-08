@@ -1,0 +1,153 @@
+/* =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 2365〜2511（全 2732 行）
+区画: 10_完了・着信・一時停止 … finishChat（完了の記録）、showPhone/handlePhone（着信）、togglePause（一時停止・再開）
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== */
+  function finishChat(result, event) {
+    if (state.gameOver || state.paused) return;
+    if (!accepts(event)) return;
+    const chat = getActiveChat();
+    if (!chat || chat.status === "completed") return;
+
+    chat.status = "completed";
+    chat.completedAt = Date.now();
+    chat.selectedAction = result.action;
+    chat.selectedReply = result.selectedReply || "";
+    Object.assign(chat, Logic.judge(chat, result, state.level));
+
+    state.activeId = null;
+    renderAll();
+    clearSelection();
+
+    const allDone = state.chats.every((item) => item.status === "completed");
+    if (state.level === 1 && allDone) {
+      endGame("complete");
+    } else if (state.level !== 1 && allDone && state.nextPoolIndex >= state.pool.length) {
+      // 新着が尽きたあとに手持ちがなくなったら、残り時間を待たせずに終了する。
+      endGame("complete");
+    } else {
+      focusNextOpenChat();
+    }
+  }
+
+  function showPhone() {
+    // 表示中の着信を上書きしない（最初の相手が記録されずに差し替わるのを防ぐ）。
+    if (state.gameOver || state.paused || state.currentPhone) return;
+    // 候補が6件しかないため、抽選し直さないと同じ相手が連続で着信する。
+    const candidates = PHONE_DATA.filter((item) => item !== state.lastPhone);
+    const pool = candidates.length ? candidates : PHONE_DATA;
+    state.currentPhone = pool[randomBetween(0, pool.length - 1)];
+    state.lastPhone = state.currentPhone;
+    els.callerName.textContent = state.currentPhone.caller;
+    const before = document.activeElement;
+    state.focusBeforePhone = before;
+    state.focusBeforePhoneChatId = before && before.dataset && before.dataset.chatId ? before.dataset.chatId : null;
+    els.phoneModal.classList.add("show");
+    // 着信画面が前面に出た（入力中の Space/Enter の続きが届く場面なので、キーも締め出す）
+    markScreenChange(null, true);
+    setShellInert();
+    // 入力中の Space／Enter が「応答する」に落ちないよう、初期フォーカスはボタンではなく着信画面そのものに置く。
+    els.phoneCard.focus();
+  }
+
+  function handlePhone(didAnswer, event) {
+    if (!state.currentPhone || state.gameOver || state.paused) return;
+    if (!accepts(event)) return;
+    const { correct } = Logic.judgePhone(state.currentPhone.isEmergency, didAnswer);
+    state.phoneRecords.push({
+      caller: state.currentPhone.caller,
+      isEmergency: state.currentPhone.isEmergency,
+      didAnswer,
+      correct,
+      at: Date.now()
+    });
+    els.phoneModal.classList.remove("show");
+    state.currentPhone = null;
+    // 着信画面が閉じて背面が露出した
+    markScreenChange(null);
+    setShellInert();
+
+    if (didAnswer) {
+      state.activeId = null;
+      clearSelection();
+      renderSidebar();
+      els.chatHeading.textContent = "電話対応完了";
+      els.chatBadge.textContent = "復帰";
+      els.messageStage.innerHTML = '<div class="empty-state">電話対応が完了しました。受信トレイから作業を再開してください。</div>';
+      focusNextOpenChat();
+    } else {
+      // 無視した場合は作業が中断されない想定なので、元の位置に戻して作業を続けられるようにする。
+      // 着信中に受信トレイが描き直されて元の要素が消えていたら、同じチャットの項目を引き直す。
+      const previous = state.focusBeforePhone;
+      const again = state.focusBeforePhoneChatId !== null
+        ? els.chatList.querySelector(`[data-chat-id="${state.focusBeforePhoneChatId}"]`) : null;
+      const modalParts = [els.answerPhone, els.ignorePhone, els.phonePause, els.phoneCard];
+      if (previous && document.contains(previous) && !modalParts.includes(previous)) {
+        previous.focus();
+      } else if (again) {
+        again.focus();
+      } else {
+        restoreWorkFocus();
+      }
+    }
+    state.focusBeforePhone = null;
+    state.focusBeforePhoneChatId = null;
+
+    showToast(correct ? "電話判断を記録しました。" : "電話判断を記録しました。結果画面で確認できます。");
+    scheduleNextPhone();
+  }
+
+  function togglePause() {
+    if (state.gameOver || !document.getElementById("game-screen").classList.contains("active")) return;
+    state.paused = !state.paused;
+    els.pauseOverlay.classList.toggle("show", state.paused);
+    els.pauseBtn.textContent = state.paused ? "再開" : "一時停止";
+    if (state.paused) {
+      state.pausedAt = Date.now();
+      // 新着・着信の予約は「残り時間」を保存して止める。
+      // 再開時に固定の短い間隔で張り直すと、一時停止するたびに新着と着信が前倒しで増えてしまう。
+      state.chatLeft = state.chatTimerId ? Math.max(0, state.chatDueAt - Date.now()) : null;
+      state.phoneLeft = state.phoneTimerId ? Math.max(0, state.phoneDueAt - Date.now()) : null;
+      window.clearTimeout(state.chatTimerId);
+      window.clearTimeout(state.phoneTimerId);
+      state.chatTimerId = null;
+      state.phoneTimerId = null;
+      // 着信中に一時停止した場合、再開するまで着信画面を伏せておく。
+      if (state.currentPhone) els.phoneModal.classList.remove("show");
+      // 背面のボタンに操作が届かないよう、背面を不活性にして停止画面へフォーカスを移す。
+      setShellInert();
+      // 停止画面が前面に出た（着信画面の「一時停止」の真下に「再開」が重なるため、ダブルクリックの 2 回目を捨てる）
+      markScreenChange(null);
+      els.resumeBtn.focus();
+    } else {
+      if (state.pausedAt) {
+        const delta = Date.now() - state.pausedAt;
+        state.endsAt += delta;
+        // 停止中の時間を処理時間（結果画面の平均処理・CSV の各時間）に含めない。
+        state.chats.forEach((chat) => {
+          if (chat.status === "completed") return;
+          if (chat.createdAt) chat.createdAt += delta;
+          if (chat.openedAt) chat.openedAt += delta;
+          if (chat.prioAt) chat.prioAt += delta;
+        });
+      }
+      state.pausedAt = 0;
+      // 停止画面が閉じて背面が露出した
+      markScreenChange(null);
+      if (state.chatLeft !== null) scheduleNextChat(Math.max(1500, state.chatLeft));
+      if (state.level === 3 && !state.currentPhone && state.phoneLeft !== null) scheduleNextPhone(Math.max(2200, state.phoneLeft));
+      state.chatLeft = null;
+      state.phoneLeft = null;
+      if (state.currentPhone) {
+        els.phoneModal.classList.add("show");
+        markScreenChange(null, true);
+        setShellInert();
+        els.phoneCard.focus();
+      } else {
+        setShellInert();
+        restoreWorkFocus();
+      }
+    }
+  }
+

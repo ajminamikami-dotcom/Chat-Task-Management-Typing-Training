@@ -1,0 +1,101 @@
+<!-- =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1054〜1148（全 2732 行）
+区画: 02_開始画面HTML … 開始画面（レベル・時間・表示の設定、判定基準パネル、ロゴ）
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== -->
+<body>
+<img class="app-logo-fixed" src="data:image/…;base64,【画像データ 27986 文字を省略】" alt="Access Job 名古屋上前津 ロゴ">
+<main>
+  <section id="start-screen" class="screen active" aria-labelledby="app-title">
+    <header class="top-line">
+      <div class="brand">
+        <h1 id="app-title" class="brand-title">チャットタスク管理・タイピングトレーニング</h1>
+        <p class="brand-subtitle">就労移行支援事業所向け 職場シミュレーション</p>
+      </div>
+      <img class="header-logo" src="data:image/…;base64,【画像データ 27986 文字を省略】" alt="Access Job 名古屋上前津 ロゴ">
+    </header>
+
+    <div class="start-layout">
+      <section class="panel" aria-labelledby="criteria-title">
+        <div class="panel-head">
+          <h2 id="criteria-title">判定基準</h2>
+        </div>
+        <div class="panel-body rule-grid">
+          <div class="rule-note">上から順に見て、最初に当てはまる区分にします。「返信不要」とあっても、予定の変更や対応事項があれば「中」です。</div>
+          <div class="rule-row">
+            <span class="badge high">高</span>
+            <div><strong>至急対応。</strong> システム停止、重大なクレーム、本日中の締切、重要顧客の来訪、至急の依頼。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge mid">中</span>
+            <div><strong>期限内に対応。</strong> 数日内の提出、期限付きの依頼、通常の業務連絡（「急ぎではありません」とあれば低）、会議・予定の変更、リマインド、対応事項のある全社連絡。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge low">低</span>
+            <div><strong>急がない。</strong> 雑談、社内ニュース、任意参加の案内、情報共有、「急ぎではありません」などと書かれた軽い依頼。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge neutral">返信</span>
+            <div><strong>「返信不要」は送らず完了。</strong> 依頼・質問・確認事項がある連絡には返信します。同僚など個人からの声かけは、内容が情報共有でも返信します。ただし「返信不要」とあれば個人からの声かけでも送りません。お知らせ・情報共有だけの連絡は返信しません。</div>
+          </div>
+          <div class="rule-row">
+            <span class="badge neutral">電話</span>
+            <div><strong>緊急なら応答、急がない相手は無視。</strong> 重要顧客・障害の連絡・社長からの電話は応答し、営業の電話や誘いの電話は無視して作業を続けます（Level 3）。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="level-title">
+        <div class="panel-head">
+          <h2 id="level-title">トレーニング開始</h2>
+        </div>
+        <div class="panel-body">
+          <div class="level-grid">
+            <button class="level-card" type="button" data-start-level="1">
+              <span>
+                <span class="level-title">Level 1 基礎</span>
+                <span class="level-desc">選択式で、優先度判断と返信不要の見極めを練習します。</span>
+              </span>
+              <span class="level-chip" id="level1-count">全問</span>
+            </button>
+            <button class="level-card" type="button" data-start-level="2">
+              <span>
+                <span class="level-title">Level 2 実践</span>
+                <span class="level-desc">制限時間内に、届くチャットを判断して正確に入力します。</span>
+              </span>
+              <span class="level-chip">タイピング</span>
+            </button>
+            <button class="level-card" type="button" data-start-level="3">
+              <span>
+                <span class="level-title">Level 3 応用</span>
+                <span class="level-desc">チャット処理に電話割り込みを加え、切り替え力を練習します。</span>
+              </span>
+              <span class="level-chip">割り込み</span>
+            </button>
+          </div>
+
+          <div class="settings-grid" aria-label="実施設定">
+            <div class="setting-block">
+              <span class="setting-label">制限時間（Level 2・3で有効）</span>
+              <div class="segmented" id="duration-options">
+                <button type="button" data-duration="300">5分</button>
+                <button type="button" data-duration="600">10分</button>
+                <button type="button" data-duration="900">15分</button>
+              </div>
+            </div>
+            <div class="setting-block">
+              <span class="setting-label">表示</span>
+              <div class="segmented" id="display-options">
+                <button type="button" data-comfortable="false">標準</button>
+                <button type="button" data-comfortable="true">ゆったり</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="note-strip">結果画面では未完了タスクも含めてCSVに出力します。</div>
+        </div>
+      </section>
+    </div>
+  </section>
+

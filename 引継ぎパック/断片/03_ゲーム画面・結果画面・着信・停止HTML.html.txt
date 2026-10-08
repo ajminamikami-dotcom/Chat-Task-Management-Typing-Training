@@ -1,0 +1,129 @@
+<!-- =====
+読み取り専用コピー（本体から機械的に切り出したもの。ここを編集しても本体は変わりません。埋め込み画像の base64 は省略）
+本体: チャットタスク管理_タイピングトレーニング.html  行 1149〜1271（全 2732 行）
+区画: 03_ゲーム画面・結果画面・着信・停止HTML … 受信トレイ・チャット表示・操作パネルの枠、結果画面、着信画面、一時停止画面
+作り直し: node 引継ぎパック/断片/make-chunks.js   一致の確認: 同じコマンドに --check
+===== -->
+  <section id="game-screen" class="screen" aria-labelledby="session-heading">
+    <div class="game-shell">
+      <header class="game-top">
+        <div class="session-title">
+          <strong id="session-heading">Level</strong>
+          <span id="session-subtitle">開始待ち</span>
+        </div>
+        <img class="header-logo" src="data:image/…;base64,【画像データ 27986 文字を省略】" alt="Access Job 名古屋上前津 ロゴ">
+        <div class="game-metrics" aria-label="進行状況">
+          <div class="metric">
+            <span class="metric-label">残り</span>
+            <span class="metric-value" id="timer">--:--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">完了</span>
+            <span class="metric-value" id="done-count">0</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">未完了</span>
+            <span class="metric-value" id="open-count">0</span>
+          </div>
+          <button class="header-btn" type="button" id="pause-btn">一時停止</button>
+          <button class="header-btn danger" type="button" id="finish-btn">終了</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="inbox" aria-labelledby="inbox-title">
+          <div class="inbox-head">
+            <h2 id="inbox-title" tabindex="-1">受信トレイ</h2>
+            <div class="inbox-stats">
+              <span id="unread-count">未処理 0</span>
+              <span id="pending-count">保留 0</span>
+              <span id="completed-count">処理済 0</span>
+            </div>
+          </div>
+          <div class="chat-list" id="chat-list"></div>
+        </aside>
+
+        <section class="conversation" aria-labelledby="chat-heading">
+          <div class="conversation-head">
+            <h2 id="chat-heading">チャットを選択してください</h2>
+            <span class="badge neutral" id="chat-status-badge">待機</span>
+          </div>
+          <div class="message-stage" id="message-stage">
+            <div class="empty-state">左の受信トレイから未処理または保留中のメッセージを選択してください。</div>
+          </div>
+        </section>
+
+        <aside class="task-panel" aria-labelledby="task-panel-title">
+          <div class="task-inner" id="task-panel-content">
+            <section class="step">
+              <h3 id="task-panel-title">処理ステップ</h3>
+              <p class="feedback-line">チャットを選ぶと操作パネルが表示されます。</p>
+            </section>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="result-screen" class="screen" aria-labelledby="result-title">
+    <header class="top-line">
+      <div class="brand">
+        <h1 id="result-title" class="brand-title">トレーニング結果</h1>
+        <p class="brand-subtitle" id="result-subtitle">振り返り</p>
+      </div>
+      <img class="header-logo" src="data:image/…;base64,【画像データ 27986 文字を省略】" alt="Access Job 名古屋上前津 ロゴ">
+    </header>
+
+    <div class="result-layout">
+      <div class="score-grid" id="score-grid"></div>
+      <div class="insight-grid" id="insight-grid"></div>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>要確認タスク</h2>
+        </div>
+        <div class="panel-body table-wrap" id="review-table"></div>
+      </section>
+      <div class="result-actions">
+        <button class="primary-btn" type="button" id="download-csv-btn">CSVをダウンロード</button>
+        <button class="text-btn" type="button" id="retry-btn">同じ条件でもう一度</button>
+        <button class="text-btn" type="button" id="menu-btn">メニューに戻る</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="phone-modal" role="dialog" aria-modal="true" aria-labelledby="phone-title" aria-describedby="caller-name">
+  <div class="modal" id="phone-card" tabindex="-1">
+    <div class="modal-body">
+      <h2 id="phone-title">着信中</h2>
+      <p id="caller-name" style="font-size:22px; font-weight:800; margin:8px 0 12px;">相手の名前</p>
+      <p style="margin:0; color:var(--muted);">緊急性を判断して対応してください。落ち着きたいときは Esc か「一時停止」で止められます。</p>
+    </div>
+    <div class="modal-actions">
+      <button class="primary-btn" type="button" id="answer-phone-btn">応答する</button>
+      <button class="secondary-btn" type="button" id="ignore-phone-btn">無視する</button>
+      <button class="text-btn span-2" type="button" id="phone-pause-btn">一時停止（Esc）</button>
+    </div>
+  </div>
+</div>
+
+<div class="pause-overlay" id="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+  <div class="pause-card">
+    <div id="pause-normal">
+      <h2 id="pause-title" style="margin-top:0;">一時停止中</h2>
+      <p style="color:var(--muted);">タイマー、チャット追加、電話着信を止めています。停止中の時間は処理時間に含まれません。</p>
+      <button class="primary-btn" type="button" id="resume-btn">再開</button>
+    </div>
+    <div id="finish-confirm" hidden>
+      <h2 id="finish-title" style="margin-top:0;">トレーニングを終了しますか？</h2>
+      <p style="color:var(--muted);">結果画面へ移ります。残り時間と処理中の課題はここで打ち切られます。</p>
+      <div class="pause-actions">
+        <button class="text-btn" type="button" id="finish-cancel-btn">続ける</button>
+        <button class="secondary-btn" type="button" id="finish-confirm-btn">終了して結果を見る</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
